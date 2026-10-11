@@ -37,7 +37,7 @@ class _Finder(QThread):
                 m = self.look.find(t)
                 self.found.emit(i, m, self.look.cover(m.release_id) if m and m.release_id and not t.has_cover else None)
             except (URLError, OSError, ValueError) as e:
-                self.failed.emit(str(e))
+                self.failed.emit(tagger.friendly(e))
                 return
 
 
