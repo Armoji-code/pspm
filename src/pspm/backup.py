@@ -15,6 +15,7 @@ import json
 import secrets
 import shutil
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -60,7 +61,12 @@ class Provider:
 
     def __init__(self, pcfg: dict, refresh_token: str):
         self.cfg = pcfg
-        tok = _form(pcfg["token_url"], {"grant_type": "refresh_token", "refresh_token": refresh_token, **_client(pcfg)})
+        try:
+            tok = _form(pcfg["token_url"], {"grant_type": "refresh_token", "refresh_token": refresh_token, **_client(pcfg)})
+        except urllib.error.HTTPError as e:
+            if e.code in (400, 401):  # revoked, or expired (Google signs out apps still in Testing every 7 days)
+                raise PermissionError("SIGN-IN EXPIRED · SIGN OUT AND SIGN IN AGAIN") from e
+            raise
         self.auth = {"Authorization": f"Bearer {tok['access_token']}"}
 
     def put(self, path: str, f, size: int) -> None:

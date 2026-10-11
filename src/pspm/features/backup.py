@@ -96,7 +96,7 @@ class BackupPage(QWidget):
             backup.set_token(pid, None)
             self._picked()
             self.status.setText("SIGNED OUT")
-        elif not pcfg.get("client_id"):
+        elif not all(pcfg.get(k, "-") for k in ("client_id", "client_secret")):  # Dropbox has no secret
             self.status.setText(f"[{self.pick.currentText()} SIGN-IN ISN'T SET UP IN THIS BUILD · SEE README]")
         else:
             cls = self.all[pid]
