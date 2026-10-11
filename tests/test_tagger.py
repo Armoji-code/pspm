@@ -78,3 +78,51 @@ def test_sort_into_album_folders(tmp_path, mp3):
     tagger.write(tagger.Track(mp3, "AC/DC", "x", "Back: In Black"))
     moved = tagger.sort_into(tagger.scan(mp3.parent), tmp_path / "out", "album")
     assert moved == [tmp_path / "out" / "Back_ In Black" / mp3.name]
+
+
+def _http(code, retry_after=None):
+    import urllib.error
+    from email.message import Message
+
+    h = Message()
+    if retry_after:
+        h["Retry-After"] = retry_after
+    return urllib.error.HTTPError("u", code, "x", h, None)
+
+
+class _Resp(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        pass
+
+
+def test_get_retries_busy_then_succeeds(cfg, monkeypatch):
+    calls, sleeps = [], []
+
+    def urlopen(req, timeout):
+        calls.append(req.get_header("User-agent"))
+        if len(calls) < 3:
+            raise _http(503, "2" if len(calls) == 1 else None)
+        return _Resp(b"ok")
+
+    monkeypatch.setattr(tagger.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(tagger.time, "sleep", sleeps.append)
+    assert tagger.Lookup(cfg)._get("http://x") == b"ok"
+    assert calls == [cfg["tagger"]["user_agent"]] * 3
+    assert [s for s in sleeps if s] == [2.0, 2.0]  # Retry-After, then backoff 2**1
+
+
+def test_get_gives_up_and_cover_is_optional(cfg, monkeypatch):
+    def urlopen(req, timeout):
+        raise _http(503)
+
+    monkeypatch.setattr(tagger.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(tagger.time, "sleep", lambda s: None)
+    look = tagger.Lookup(cfg)
+    with pytest.raises(tagger.urllib.error.HTTPError) as e:
+        look._get("http://x")
+    assert "busy" in tagger.friendly(e.value)
+    assert look.cover("r") is None  # a missing cover never stops the lookup
+    assert "connection" in tagger.friendly(tagger.urllib.error.URLError("dns"))

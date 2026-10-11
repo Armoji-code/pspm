@@ -70,7 +70,7 @@ Other clouds can be added by another package: subclass `pspm.backup.Provider` an
 - **Space**: used, free and total on the memory stick.
 - **Check filesystem**: a read-only check (`fsck.vfat -n` on Linux, `chkdsk` on Windows). Both need admin rights, so you get a password or UAC prompt. Nothing is repaired.
 - **Test capacity**: finds fake memory sticks. PSPM fills the free space with test data; you unplug and replug the PSP, then press VERIFY CAPACITY to read it back, and the test data is deleted. It takes a while on a big stick. On a fake card, writing past its real size can damage files already on it, so back up first.
-- **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM Info* from the PSP's Game menu (needs custom firmware), and the next time you plug in PSPM shows them. The app's source is in `psp/pspm_info` and CI builds it with the PSPDEV toolchain.
+- **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM Info* from the PSP's Game menu (needs custom firmware), and the next time you plug in PSPM shows them. The app ships prebuilt in `src/pspm/psp_app/`; its source is in `psp/pspm_info` (rebuild with the PSPDEV toolchain: `make -C psp/pspm_info`, then copy `EBOOT.PBP` over).
 
 ## PS1 converter
 
@@ -98,7 +98,7 @@ The plugin and viewer are [RemoteJoyLite](https://github.com/Kethen/RemoteJoyLit
 Copies the official ARK files to the memory stick so you can install ARK on the PSP. PSPM never writes the PSP's flash; that happens on the PSP when you run the installer.
 
 **Supported:** every PSP-1000, 2000, 3000, Go and Street (E1000) on official firmware 6.60 or 6.61.
-**Not supported:** other firmware (update to 6.61 with Sony's updater first), PS Vita, development units. Already on ARK-4: use ARK's own updater. On PRO or ME with a permanent cIPL: follow ARK's DC10 guide instead.
+**Not supported:** other firmware (update to 6.61 with Sony's updater first), PS Vita, development units. Already on ARK-4 or ARK-5: pick Update, which copies ARK's own updater (`PSP/GAME/UPDATE`) and keeps your settings and plugins. PSPM preselects it when it finds `PSP/SAVEDATA/ARK_01234` on the stick. On PRO or ME with a permanent cIPL: follow ARK's DC10 guide instead.
 
 1. Pick ARK-5 (default, via [FasterARK](https://github.com/PSP-Arkfive/FasterARK)) or ARK-4's final release ([v4.20.69 r206](https://github.com/PSP-Archive/ARK-4), archived August 2026).
 2. Tick the boxes: firmware (skipped when the PSPM Info app already reported it), battery at 75% or more with the charger in, and the risk.

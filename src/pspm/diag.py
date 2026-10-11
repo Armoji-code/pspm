@@ -11,14 +11,12 @@ from . import platform
 from .device import Device
 
 BLOCK = 1 << 20
-APP = files("pspm").joinpath("psp_app/EBOOT.PBP")  # built by CI from psp/pspm_info, absent in a source checkout
+APP = files("pspm").joinpath("psp_app/EBOOT.PBP")  # prebuilt from psp/pspm_info; rebuild it when main.c changes
 MODELS = {"01g": "PSP-1000", "02g": "PSP-2000", "03g": "PSP-3000", "04g": "PSP-3000", "05g": "PSP Go",
           "07g": "PSP-3000", "09g": "PSP-3000", "11g": "PSP-E1000 (Street)"}
 
 
 def install_app(dev: Device, cfg: dict) -> Path:
-    if not APP.is_file():
-        raise FileNotFoundError("this PSPM build doesn't include the PSP info app")
     dest = dev.root / cfg["diag"]["info_app_folder"]
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "EBOOT.PBP").write_bytes(APP.read_bytes())
