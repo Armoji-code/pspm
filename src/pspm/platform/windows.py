@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 import winreg
@@ -33,3 +34,10 @@ def fs_check(device: str) -> tuple[int, str]:
         r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
                            capture_output=True, text=True, errors="replace", check=False)
         return r.returncode, out.read_text(errors="replace") if out.exists() else r.stderr
+
+
+def stream_ready(rule: Path) -> None:
+    # The viewer talks to the PSP through the libusb-win32 driver, which Windows doesn't have by default.
+    if not (Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "drivers" / "libusb0.sys").exists():
+        raise OSError("no PSP USB driver yet: with the plugin running on the PSP, open Zadig, "
+                      "pick 'PSP Type B' and install libusb-win32, then start again")

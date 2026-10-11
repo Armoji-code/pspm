@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files", "diag", "tagger", "saves", "backup", "ps1"]
+features = ["files", "diag", "tagger", "saves", "backup", "ps1", "stream"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -98,6 +98,34 @@ exe = "psxpackager.exe"
 url = "https://github.com/RupertAvery/PSXPackager/releases/download/v1.6.3/psxpackager-linux-x64.tar.gz"
 sha256 = "378ecb4d2310c8f72fc77ec092e50797427de79d6e001ab0b56eaad4699890da"
 exe = "psxpackager-linux-x64/psxpackager"
+
+# Screen streaming, PSP to PC, with RemoteJoyLite (github.com/Kethen/RemoteJoyLite): a plugin on the PSP sends the
+# screen over the USB cable to a viewer window on the PC, which also passes your keyboard or gamepad to the PSP.
+# Downloaded on first use and checked by sha256. Needs custom firmware. PC to PSP isn't offered: no maintained tool exists.
+[stream]
+plugin = "SEPLUGINS/RemoteJoyLite.prx"
+
+# Plugin list on the stick -> lines that load the plugin. PLUGINS.TXT is ARK's; the .txt files are PRO/ME's.
+# shortcut: paths say ms0:, so a PSP Go streams only with the plugin on its memory stick, not internal storage (ef0:).
+[stream.lists]
+"SEPLUGINS/PLUGINS.TXT" = ["vsh, ms0:/SEPLUGINS/RemoteJoyLite.prx, on", "game, ms0:/SEPLUGINS/RemoteJoyLite.prx, on",
+                           "pops, ms0:/SEPLUGINS/RemoteJoyLite.prx, on"]
+"SEPLUGINS/vsh.txt" = ["ms0:/SEPLUGINS/RemoteJoyLite.prx 1"]
+"SEPLUGINS/game.txt" = ["ms0:/SEPLUGINS/RemoteJoyLite.prx 1"]
+"SEPLUGINS/pops.txt" = ["ms0:/SEPLUGINS/RemoteJoyLite.prx 1"]
+
+[stream.tool]
+version = "2026-01-06"
+url = "https://github.com/Kethen/RemoteJoyLite/releases/download/2026-01-06/RemoteJoyLite_a0bc706a.zip"
+sha256 = "93c6c739e05a5008e753f5b0982f78130bbc863bae9f3668349919ed8ba68768"
+prx = "psp/RemoteJoyLite.prx"
+udev_rule = "x64_linux/60-psp-b-usb.rules"  # Linux: lets you, not just root, open the PSP's USB
+timeout_seconds = 120
+
+# Viewer per OS; {dir} is the unpacked download. Use the _JA_ files for the Japanese viewer. On Linux it runs in Wine.
+[stream.run]
+windows = ["{dir}/x64/RemoteJoyLite_EN_64.exe"]
+linux = ["bash", "{dir}/x64_linux/start_linux_EN.sh"]
 
 [themes.dark]
 bg = "#000000"

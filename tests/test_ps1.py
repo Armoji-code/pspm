@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from pspm import config, platform, ps1
+from pspm import config, platform, ps1, tools
 
 
 def _pbp(title=b"Metal Gear Solid"):
@@ -65,7 +65,7 @@ def test_tool_download_checks_sha256(tmp_path, monkeypatch):
         z.writestr("bin/psxpackager", "#!/bin/sh\n")
     cfg = config.load(tmp_path / "x")
     t = cfg["ps1"]["tool"][platform.name()] = {"url": "https://x/t.zip", "exe": "bin/psxpackager", "sha256": "0"}
-    monkeypatch.setattr(ps1.urllib.request, "urlopen", lambda url, timeout: io.BytesIO(buf.getvalue()))
+    monkeypatch.setattr(tools.urllib.request, "urlopen", lambda url, timeout: io.BytesIO(buf.getvalue()))
     with pytest.raises(OSError, match="checksum"):
         ps1.tool(cfg, tmp_path)
     t["sha256"] = hashlib.sha256(buf.getvalue()).hexdigest()
