@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files", "diag", "tagger", "saves", "backup"]
+features = ["files", "diag", "tagger", "saves", "backup", "ps1"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -80,6 +80,24 @@ info_file = "PSP/COMMON/pspm_info.txt"
 test_folder = "PSPM_TEST"  # capacity test data, removed after VERIFY
 test_file_mb = 1024        # size of each test file (FAT32 caps files at 4 GB)
 test_reserve_mb = 16       # free space left untouched by the capacity test
+
+# PS1 converter. Turns PS1 disc images into an EBOOT.PBP in the games folder, for the PSP's PS1 emulator.
+# Uses PSXPackager (MIT, github.com/RupertAvery/PSXPackager), downloaded on first use and checked by sha256.
+# Its download includes the converter's own base files; PSPM ships none of them. Needs custom firmware on the PSP.
+[ps1]
+version = "1.6.3"
+compression = 5            # 0-9; higher is smaller and slower to convert
+timeout_seconds = 120
+
+[ps1.tool.windows]          # needs the .NET 8 runtime (Windows offers to install it on first run)
+url = "https://github.com/RupertAvery/PSXPackager/releases/download/v1.6.3/psxpackager-win-x64.zip"
+sha256 = "3aaabe6009461c13bec85cfc441cf30dac6314867297a0bfd9b4b0257c8ced83"
+exe = "psxpackager.exe"
+
+[ps1.tool.linux]
+url = "https://github.com/RupertAvery/PSXPackager/releases/download/v1.6.3/psxpackager-linux-x64.tar.gz"
+sha256 = "378ecb4d2310c8f72fc77ec092e50797427de79d6e001ab0b56eaad4699890da"
+exe = "psxpackager-linux-x64/psxpackager"
 
 [themes.dark]
 bg = "#000000"

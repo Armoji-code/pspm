@@ -16,6 +16,7 @@ BUILTIN = {
     "saves": "pspm.features.saves:FEATURE",
     "backup": "pspm.features.backup:FEATURE",
     "diag": "pspm.features.diag:FEATURE",
+    "ps1": "pspm.features.ps1:FEATURE",
 }
 
 
