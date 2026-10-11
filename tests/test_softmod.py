@@ -28,6 +28,8 @@ def test_install_copies_only_listed_folders_and_backs_up(tmp_path):
     assert (dev.root / "PSP/GAME/ARK_Loader/EBOOT.PBP").read_bytes() == b"ARK_Loader"
     assert not (dev.root / "PSP/GAME/ARK_Loader/OLD.PRX").exists() and (kept / "PSP/GAME/ARK_Loader/OLD.PRX").exists()
     assert not list(dev.root.rglob("ARK_cIPL"))
+    softmod.install(dev, cfg, "ark4", softmod.files(cfg, "ark4", home, cipl=True), tmp_path / "bk", cipl=True)
+    assert (dev.root / "PSP/GAME/ARK_cIPL/EBOOT.PBP").read_bytes() == b"flash"
 
 
 def test_problems_block_wrong_firmware_and_full_stick(tmp_path, monkeypatch):
@@ -36,6 +38,9 @@ def test_problems_block_wrong_firmware_and_full_stick(tmp_path, monkeypatch):
     assert softmod.problems(dev, cfg, todo, {}) == []
     assert softmod.problems(dev, cfg, todo, {"firmware": "6.61"}) == []
     assert "6.39" in softmod.problems(dev, cfg, todo, {"firmware": "6.39"})[0]
+    assert "40%" in softmod.problems(dev, cfg, todo, {"battery": "40%", "charger": "not connected"})[0]
+    assert softmod.problems(dev, cfg, todo, {"battery": "40%", "charger": "connected"}) == []
+    assert softmod.problems(dev, cfg, todo, {"battery": "none"}) == []
     monkeypatch.setattr(device.Device, "usage", lambda self: type("U", (), {"free": 0})())
     assert "free" in softmod.problems(dev, cfg, todo, {})[0]
 

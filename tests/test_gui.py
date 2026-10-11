@@ -145,11 +145,13 @@ def test_softmod_page_needs_boxes_then_copies(tmp_path, monkeypatch):
     from pspm.features.softmod import SoftmodPage
 
     cfg = config.load(tmp_path / "x")
-    for src in cfg["softmod"]["ark5"]["copy"]:
+    for src in cfg["softmod"]["ark5"]["copy"] | cfg["softmod"]["ark5"]["cipl"]:
         (tmp_path / "ark" / src).mkdir(parents=True)
         (tmp_path / "ark" / src / "EBOOT.PBP").write_bytes(b"ark")
     monkeypatch.setattr(softmod, "tool", lambda cfg, ark: tmp_path / "ark")
     monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.Yes)
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: warned.append(a[2]) or QMessageBox.Yes)
     (tmp_path / "psp" / "PSP" / "COMMON").mkdir(parents=True)
     (tmp_path / "psp" / "PSP" / "COMMON" / "pspm_info.txt").write_text("firmware=6.61\n")
     app = QApplication.instance() or QApplication([])
@@ -160,9 +162,12 @@ def test_softmod_page_needs_boxes_then_copies(tmp_path, monkeypatch):
     assert p.status.text() == "[TICK EVERY BOX ABOVE FIRST]" and not p.job
     p.battery.setChecked(True)
     p.risk.setChecked(True)
+    assert not p.cipl.isChecked()
+    p.cipl.setChecked(True)
     p.install()
     for _ in range(2):  # check, then the copy it starts
         p.job.wait()
         app.processEvents()
     assert (tmp_path / "psp" / "PSP" / "GAME" / "FasterARK" / "EBOOT.PBP").read_bytes() == b"ark"
-    assert p.status.text().startswith("COPIED AND VERIFIED")
+    assert p.status.text().startswith("COPIED AND VERIFIED") and "flash" in warned[0]
+    assert (tmp_path / "psp" / "PSP" / "GAME" / "CustomIPL" / "EBOOT.PBP").exists()

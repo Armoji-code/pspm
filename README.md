@@ -97,7 +97,7 @@ Copies the official ARK files to the memory stick so you can install ARK on the 
 3. Press COPY ARK. PSPM checks the firmware and free space, shows what it will copy, moves any ARK folders already there to a backup, copies, and reads every file back.
 4. On the PSP, leave USB mode, keep the charger in, and run FasterARK (ARK-5) or ARK Loader (ARK-4) from the Game menu.
 
-ARK then runs until a full power-off, after which you run the same app again. Making it permanent needs ARK's cIPL installer (`CustomIPL` / `ARK_cIPL`), which writes the PSP's flash; PSPM doesn't copy it.
+ARK then runs until a full power-off, after which you run the same app again. To make it permanent, tick the cIPL box before copying: PSPM warns you again, then also copies ARK's cIPL installer (`CustomIPL` for ARK-5, `ARK_cIPL` for ARK-4). Run it on the PSP only once ARK works, with the charger in. It writes the PSP's flash, and a power cut while it runs can brick the console. If the PSPM Info app last saw the battery below 75% without the charger, PSPM refuses to copy.
 Both releases are downloaded on first use from GitHub and checked against the sha256 in `defaults.toml`. FasterARK reuses one `latest` tag, so its next release will be refused until the url and sha256 there are updated.
 
 ## Change things without touching code
