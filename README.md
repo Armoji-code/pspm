@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager) and the MP3 tagger from phase 2. See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and the MP3 tagger and PPSSPP save sync from phase 2. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -15,6 +15,13 @@ pspm config           # where your config.toml override lives
 ```
 
 Fonts (optional, the UI falls back without them): install Space Grotesk, Space Mono and Doto from Google Fonts.
+
+## PPSSPP saves
+
+Each time the PSP is plugged in, PSPM syncs `PSP/SAVEDATA` with PPSSPP's both ways, so you can carry on where you left off on either.
+The side that changed since the last sync wins. If a save changed on both, PSPM asks which to keep (newest is suggested).
+Every overwritten save is moved to a backup folder first, and deleting a save on one side never deletes it on the other.
+If PPSSPP isn't found (portable install, custom memstick), press PPSSPP FOLDER and pick its `PSP/SAVEDATA`.
 
 ## Change things without touching code
 

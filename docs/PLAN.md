@@ -46,7 +46,7 @@ PSP detection: psutil checks mounted drives every 2 seconds. This works on every
 | 5 | PS1 converter | Call pop-fe (Python, LGPL) or PSXPackager (MIT, .NET CLI) as a subprocess. We never ship BIOS or games. | low |
 | 6 | Streaming | PSP to PC: RemoteJoyLite (Kethen fork, works with ARK, Windows native, Linux via Wine, needs a libusb driver). PC to PSP: no maintained tool exists (PSPDisp is dead), so this would be new work. While streaming, USB storage is off, so PSPM has to switch modes. | high |
 | 7 | Cloud backup | Google Drive (`drive.file` scope, sign in in the browser) and Dropbox (PKCE, no secret) behind one small provider interface. Backs up saves first, then anything picked. | medium |
-| 8 | PPSSPP saves | **Change from the ask:** a symlink to the PSP breaks the moment it's unplugged (PPSSPP sees an empty folder and may write saves in the wrong place). Instead PSPM syncs `SAVEDATA` both ways each time the PSP is plugged in, keeps a snapshot before overwriting, and asks when both sides changed. Finds PPSSPP on Windows (`installed.txt` rules), Linux, Flatpak and later macOS/Android. | medium |
+| 8 | PPSSPP saves | **Built (phase 2).** **Change from the ask:** a symlink to the PSP breaks the moment it's unplugged (PPSSPP sees an empty folder and may write saves in the wrong place). Instead PSPM syncs `SAVEDATA` both ways each time the PSP is plugged in, keeps a snapshot before overwriting, and asks when both sides changed. Each save folder is compared by content hash against the last sync, so the side that changed wins; if both changed it asks, suggesting the newest. Deletes are never synced. Finds PPSSPP via per-OS paths in config (Windows Documents, Linux, Flatpak); portable installs pick the folder once. | medium |
 | 9 | Auto softmod | Guided install that copies the CFW files to the stick. Hard blocks: firmware must be 6.60/6.61 (from the info app in #2 or user confirmation), battery at least 75% with charger, no Strider2 units, hashes checked after copy, explicit "I understand" before anything. Permanent cIPL is a separate, opt-in step with its own warning. Both ARK-5 (via FasterARK) and ARK-4 final (v4.20.69 r206) are offered; the user picks in the app, ARK-5 is the default. CFW zips downloaded from the official GitHub releases (GPLv3), never Sony files. | **brick risk** |
 
 Research notes: ARK-4's final release was in May 2026 and the repo was archived in August 2026. Work moved to ARK-5, installed with FasterARK (github.com/PSP-Arkfive). This came from the research pass, and I could not open those repos from here to double check.
@@ -56,7 +56,7 @@ Research notes: ARK-4's final release was in May 2026 and the repo was archived 
 | Phase | Scope | State |
 |-------|-------|-------|
 | 1 | Core, config, PSP detection, open on plug-in (login watcher), file manager, Docker, CI for Windows + Linux | scaffolded, 5 tests pass, Linux app build checked |
-| 2 | MP3 tagger, PPSSPP save sync, cloud backup | tagger built; save sync and backup next |
+| 2 | MP3 tagger, PPSSPP save sync, cloud backup | tagger and save sync built; backup next |
 | 3 | Diagnostics (+ PSP info app), PS1 converter, themes A + B | |
 | 4 | Softmod with safety checks (ARK-5 via FasterARK and ARK-4 final, user picks in the app), PSP to PC streaming | |
 | 5 | Theme editor (C), PC to PSP streaming, macOS, mobile shell | later |

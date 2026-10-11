@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files", "tagger"]
+features = ["files", "tagger", "saves"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -35,6 +35,16 @@ timeout_seconds = 15
 min_score = 90             # 0-100 MusicBrainz match score; lower finds more but guesses more
 cover_size = 500           # px, longest side; covers are saved as baseline JPEG for the PSP
 sort_by = "album"          # album | artist | genre
+
+# PPSSPP save sync. Runs both ways each time the PSP is plugged in; overwritten saves are backed up.
+[saves]
+auto_sync = true          # sync on plug-in when nothing conflicts; conflicts always wait for you
+
+# PPSSPP's memory stick PSP folder, per OS; the first that exists is used. {documents} = your Documents folder.
+# Portable or custom installs: pick the folder in the app, or add it here.
+[saves.ppsspp_paths]
+windows = ["{documents}/PPSSPP/PSP"]
+linux = ["~/.config/ppsspp/PSP", "~/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP"]
 
 [themes.dark]
 bg = "#000000"
