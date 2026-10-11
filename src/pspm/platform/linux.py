@@ -1,4 +1,3 @@
-import ctypes.util
 import json
 import os
 import shlex
@@ -56,11 +55,7 @@ UDEV_RULE = Path("/etc/udev/rules.d/60-psp-b-usb.rules")
 
 
 def stream_ready(rule: Path) -> None:
-    # The viewer is a Windows app run in Wine; it reaches the PSP through the host's libusb 0.1.
-    if not shutil.which("wine"):
-        raise OSError("install Wine to run the viewer")
-    if not ctypes.util.find_library("usb-0.1"):
-        raise OSError("install libusb 0.1 (libusb-0.1-4 on Debian/Ubuntu, libusb-0_1-4 on openSUSE)")
+    # Wine and libusb 0.1 are checked by deps ([deps.tools] in the config).
     if not UDEV_RULE.exists():  # one password prompt, then the PSP's streaming USB is yours without root
         subprocess.run(["pkexec", "sh", "-c", f'cp "$1" {UDEV_RULE} && udevadm control --reload-rules && udevadm trigger',
                         "sh", str(rule)], check=True)

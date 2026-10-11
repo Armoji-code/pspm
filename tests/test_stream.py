@@ -1,6 +1,8 @@
 import subprocess
 
-from pspm import config, device, platform, stream
+import pytest
+
+from pspm import config, deps, device, platform, stream
 
 
 def _setup(tmp_path):
@@ -29,6 +31,10 @@ def test_install_enables_plugin_once_and_remove_keeps_others(tmp_path):
 def test_start_checks_pc_then_runs_viewer(tmp_path, monkeypatch):
     cfg, _, home = _setup(tmp_path)
     seen = {}
+    monkeypatch.setattr(deps, "found", lambda check: False)
+    with pytest.raises(OSError, match="SETUP"):
+        stream.start(cfg, home)
+    monkeypatch.setattr(deps, "found", lambda check: True)
     monkeypatch.setattr(platform.current(), "stream_ready", lambda rule: seen.update(rule=rule))
     monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd, cwd=kw["cwd"]))
     stream.start(cfg, home)

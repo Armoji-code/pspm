@@ -20,6 +20,7 @@ BUILTIN = {
     "stream": "pspm.features.stream:FEATURE",
     "softmod": "pspm.features.softmod:FEATURE",
     "themes": "pspm.features.themes:FEATURE",
+    "setup": "pspm.features.setup:FEATURE",
 }
 
 

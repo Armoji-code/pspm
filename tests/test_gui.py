@@ -12,7 +12,7 @@ def test_window_builds_without_psp(tmp_path, monkeypatch):
     monkeypatch.setattr(app.device, "find", lambda cfg: [])
     QApplication.instance() or QApplication([])
     w = app.Main(config.load(tmp_path / "x"))
-    assert w.hero.text() == "NO PSP" and w.nav.count() == 9
+    assert w.hero.text() == "NO PSP" and w.nav.count() == 10
 
 
 def test_tagger_page_edit_save_sort(tmp_path):
@@ -248,3 +248,22 @@ def test_files_page_tabs_and_double_click(tmp_path):
     assert names() == ["../"] and p.sub == "CAT_PS1/MGS"
     p.enter(p.items.topLevelItem(0))
     assert names() == ["MGS/"]
+
+
+def test_setup_page_installs_missing(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from pspm import deps
+    from pspm.features.setup import SetupPage
+
+    got = []
+    monkeypatch.setattr(deps, "found", lambda check: bool(got))
+    monkeypatch.setattr(deps, "install", lambda cfg, tools: got.extend(tools) or [])
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.Yes)
+    app = QApplication.instance() or QApplication([])
+    p = SetupPage(config.load(tmp_path / "x"))
+    assert p.status.text().endswith("MISSING") and p.btn.isEnabled()
+    p.install()
+    p.job.wait()
+    app.processEvents()
+    assert got and p.status.text() == "EVERYTHING INSTALLED" and not p.btn.isEnabled()
