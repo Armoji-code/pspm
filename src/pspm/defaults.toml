@@ -25,6 +25,15 @@ music = "MUSIC"
 photos = "PICTURE"
 video = "VIDEO"
 
+# File manager tabs: label -> prefix of the top folders shown as tabs ("" = every folder).
+# CAT_ folders are the Game Categories plugin's; anything outside them goes under plain_tab.
+[files]
+plain_tab = "uncategorized"
+[files.tabs]
+games = "CAT_"
+isos = "CAT_"
+music = ""
+
 # MP3 tagger. Lookups use MusicBrainz + Cover Art Archive: free, no account or key.
 [tagger]
 musicbrainz_url = "https://musicbrainz.org/ws/2"
