@@ -24,9 +24,9 @@ QListWidget::item {{ padding: 8px; font-family: "Space Mono", monospace; color: 
 QListWidget::item:selected, QTreeWidget::item:selected, QTableWidget::item:selected {{ background: {surface}; color: {display}; }}
 QHeaderView::section {{ background: {bg}; color: {text_disabled}; border: 0; border-bottom: 1px solid {border};
     font-family: "Space Mono", monospace; font-size: 11px; padding: 6px; }}
-QPushButton, QComboBox {{ font-family: "Space Mono", monospace; font-size: 11px; padding: 8px 18px;
+QPushButton, QComboBox, QLineEdit, QSpinBox {{ font-family: "Space Mono", monospace; font-size: 11px; padding: 8px 18px;
     border: 1px solid {border}; border-radius: 16px; background: {bg}; }}
-QPushButton:hover, QComboBox:hover {{ border-color: {text}; }}
+QPushButton:hover, QComboBox:hover, QLineEdit:focus, QSpinBox:focus {{ border-color: {text}; }}
 QPushButton#danger {{ color: {accent}; }}
 QLabel#label {{ font-family: "Space Mono", monospace; font-size: 11px; color: {text_secondary}; }}
 QLabel#hero {{ font-family: "Doto", "Space Mono", monospace; font-size: 48px; color: {display}; }}

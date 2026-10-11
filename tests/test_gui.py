@@ -12,7 +12,7 @@ def test_window_builds_without_psp(tmp_path, monkeypatch):
     monkeypatch.setattr(app.device, "find", lambda cfg: [])
     QApplication.instance() or QApplication([])
     w = app.Main(config.load(tmp_path / "x"))
-    assert w.hero.text() == "NO PSP" and w.nav.count() == 8
+    assert w.hero.text() == "NO PSP" and w.nav.count() == 9
 
 
 def test_tagger_page_edit_save_sort(tmp_path):
@@ -171,3 +171,19 @@ def test_softmod_page_needs_boxes_then_copies(tmp_path, monkeypatch):
     assert (tmp_path / "psp" / "PSP" / "GAME" / "FasterARK" / "EBOOT.PBP").read_bytes() == b"ark"
     assert p.status.text().startswith("COPIED AND VERIFIED") and "flash" in warned[0]
     assert (tmp_path / "psp" / "PSP" / "GAME" / "CustomIPL" / "EBOOT.PBP").exists()
+
+
+def test_themes_page_new_and_build_copies_to_psp(tmp_path):
+    from pspm import device
+    from pspm.features.themes import ThemesPage
+
+    cfg = config.load(tmp_path / "x")
+    (tmp_path / "psp" / "PSP").mkdir(parents=True)
+    QApplication.instance() or QApplication([])
+    p = ThemesPage(cfg, work=tmp_path / "work")
+    p.new()
+    assert p.items.count() == 74 and p.folder == tmp_path / "work" / "my-theme"
+    p.name.setText("Night")
+    p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
+    p.build()
+    assert (tmp_path / "psp" / "PSP" / "THEME" / "Night.ptf").is_file(), p.status.text()

@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files", "diag", "tagger", "saves", "backup", "ps1", "stream", "softmod"]
+features = ["files", "diag", "tagger", "saves", "backup", "ps1", "stream", "softmod", "themes"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -166,6 +166,12 @@ cipl_run = "ARK_CIPL"
 "ARK_Loader" = "PSP/GAME/ARK_Loader"
 [softmod.ark4.cipl]          # permanent install, opt-in
 "PSP/ARK_cIPL" = "PSP/GAME/ARK_cIPL"
+
+# Theme maker. Builds PTF themes (any PSP on firmware 6.20 or later) and CTF themes (custom firmware with the CXMB plugin,
+# which PSPM doesn't install). CXMB only loads a CTF marked for the PSP's firmware: 0xDEAD0660 or 0xDEAD0661 for 6.60/6.61.
+# A CTF opened as a template keeps its own mark, since its flash0 files only fit the firmware it was made for.
+[theme_maker]
+ctf_magic = 0xDEAD0661
 
 [themes.dark]
 bg = "#000000"
