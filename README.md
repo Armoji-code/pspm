@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3, and PSP to PC streaming from phase 4. See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3, PSP to PC streaming and the ARK softmod from phase 4. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -84,6 +84,21 @@ Shows the PSP's screen in a window on the PC, live over the USB cable; your keyb
 - REMOVE PLUGIN takes it out of every list again.
 
 The plugin and viewer are [RemoteJoyLite](https://github.com/Kethen/RemoteJoyLite) (Kethen's fork), downloaded on first use from its GitHub release and checked against the sha256 in `defaults.toml`. Streaming the PC's screen to the PSP isn't offered: no maintained tool does it.
+
+## Softmod (ARK custom firmware)
+
+Copies the official ARK files to the memory stick so you can install ARK on the PSP. PSPM never writes the PSP's flash; that happens on the PSP when you run the installer.
+
+**Supported:** every PSP-1000, 2000, 3000, Go and Street (E1000) on official firmware 6.60 or 6.61.
+**Not supported:** other firmware (update to 6.61 with Sony's updater first), PS Vita, development units. Already on ARK-4: use ARK's own updater. On PRO or ME with a permanent cIPL: follow ARK's DC10 guide instead.
+
+1. Pick ARK-5 (default, via [FasterARK](https://github.com/PSP-Arkfive/FasterARK)) or ARK-4's final release ([v4.20.69 r206](https://github.com/PSP-Archive/ARK-4), archived August 2026).
+2. Tick the boxes: firmware (skipped when the PSPM Info app already reported it), battery at 75% or more with the charger in, and the risk.
+3. Press COPY ARK. PSPM checks the firmware and free space, shows what it will copy, moves any ARK folders already there to a backup, copies, and reads every file back.
+4. On the PSP, leave USB mode, keep the charger in, and run FasterARK (ARK-5) or ARK Loader (ARK-4) from the Game menu.
+
+ARK then runs until a full power-off, after which you run the same app again. Making it permanent needs ARK's cIPL installer (`CustomIPL` / `ARK_cIPL`), which writes the PSP's flash; PSPM doesn't copy it.
+Both releases are downloaded on first use from GitHub and checked against the sha256 in `defaults.toml`. FasterARK reuses one `latest` tag, so its next release will be refused until the url and sha256 there are updated.
 
 ## Change things without touching code
 

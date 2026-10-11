@@ -18,6 +18,7 @@ BUILTIN = {
     "diag": "pspm.features.diag:FEATURE",
     "ps1": "pspm.features.ps1:FEATURE",
     "stream": "pspm.features.stream:FEATURE",
+    "softmod": "pspm.features.softmod:FEATURE",
 }
 
 

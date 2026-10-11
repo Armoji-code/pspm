@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files", "diag", "tagger", "saves", "backup", "ps1", "stream"]
+features = ["files", "diag", "tagger", "saves", "backup", "ps1", "stream", "softmod"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -126,6 +126,39 @@ timeout_seconds = 120
 [stream.run]
 windows = ["{dir}/x64/RemoteJoyLite_EN_64.exe"]
 linux = ["bash", "{dir}/x64_linux/start_linux_EN.sh"]
+
+# Softmod: copies the official ARK custom firmware release to the memory stick, downloaded and checked by sha256.
+# PSPM never writes the PSP's flash. You install ARK on the PSP by running the copied app; until you also install a
+# cIPL there (not copied by PSPM), ARK is gone after a full power-off and you run the app again.
+# ARK supports every retail PSP (1000, 2000, 3000, Go, Street E1000) on official firmware 6.60 or 6.61.
+[softmod]
+default = "ark5"             # ark5 | ark4
+firmware = ["6.60", "6.61"]  # blocks the copy when the PSPM Info app reports anything else
+min_battery = 75             # %, asked before copying; running the installer with less risks a brick
+timeout_seconds = 120
+
+# ARK-5 through FasterARK (github.com/PSP-Arkfive/FasterARK), lite variant. Upstream re-uses the "latest" tag for
+# each release, so a new release changes the file and the sha256 check refuses it until url/sha256 are updated here.
+[softmod.ark5]
+name = "ARK-5"
+version = "5.1.0"
+url = "https://github.com/PSP-Arkfive/FasterARK/releases/download/latest/FasterARK_psp_lite.zip"
+sha256 = "16d922916beaaa4b20d7c695c1f4d0bdfa3e43f5e273fd2852c1e29d3e4081dd"
+run = "FASTERARK"
+[softmod.ark5.copy]          # folder in the download -> folder on the stick. PSP/GAME/CustomIPL is left out on purpose.
+"PSP/GAME/FasterARK" = "PSP/GAME/FasterARK"
+"PSP/SAVEDATA/ARK_01234" = "PSP/SAVEDATA/ARK_01234"
+
+# ARK-4 final release (github.com/PSP-Archive/ARK-4, archived 2026-08-02). It can update itself to ARK-5 later.
+[softmod.ark4]
+name = "ARK-4"
+version = "4.20.69-r206"
+url = "https://github.com/PSP-Archive/ARK-4/releases/download/v42069r206/ARK4.zip"
+sha256 = "d38f3dda6f18b783bdb05a9c1bf6ed46bf4cbd7963a66db4eca9f6b2fd32c483"
+run = "ARK LOADER"
+[softmod.ark4.copy]          # PSP/ARK_cIPL (permanent install) is left out on purpose.
+"ARK_01234" = "PSP/SAVEDATA/ARK_01234"
+"ARK_Loader" = "PSP/GAME/ARK_Loader"
 
 [themes.dark]
 bg = "#000000"

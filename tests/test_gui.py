@@ -12,7 +12,7 @@ def test_window_builds_without_psp(tmp_path, monkeypatch):
     monkeypatch.setattr(app.device, "find", lambda cfg: [])
     QApplication.instance() or QApplication([])
     w = app.Main(config.load(tmp_path / "x"))
-    assert w.hero.text() == "NO PSP" and w.nav.count() == 7
+    assert w.hero.text() == "NO PSP" and w.nav.count() == 8
 
 
 def test_tagger_page_edit_save_sort(tmp_path):
@@ -136,3 +136,33 @@ def test_stream_page_installs_plugin(tmp_path, monkeypatch):
     app.processEvents()
     assert (tmp_path / "psp" / "SEPLUGINS" / "RemoteJoyLite.prx").read_bytes() == b"prx"
     assert p.status.text().startswith("PLUGIN INSTALLED")
+
+
+def test_softmod_page_needs_boxes_then_copies(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from pspm import device, softmod
+    from pspm.features.softmod import SoftmodPage
+
+    cfg = config.load(tmp_path / "x")
+    for src in cfg["softmod"]["ark5"]["copy"]:
+        (tmp_path / "ark" / src).mkdir(parents=True)
+        (tmp_path / "ark" / src / "EBOOT.PBP").write_bytes(b"ark")
+    monkeypatch.setattr(softmod, "tool", lambda cfg, ark: tmp_path / "ark")
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.Yes)
+    (tmp_path / "psp" / "PSP" / "COMMON").mkdir(parents=True)
+    (tmp_path / "psp" / "PSP" / "COMMON" / "pspm_info.txt").write_text("firmware=6.61\n")
+    app = QApplication.instance() or QApplication([])
+    p = SoftmodPage(cfg, tmp_path / "bk")
+    p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
+    assert p.ark.currentData() == "ark5" and p.fw.isHidden() and "6.61" in p.known.text()
+    p.install()
+    assert p.status.text() == "[TICK EVERY BOX ABOVE FIRST]" and not p.job
+    p.battery.setChecked(True)
+    p.risk.setChecked(True)
+    p.install()
+    for _ in range(2):  # check, then the copy it starts
+        p.job.wait()
+        app.processEvents()
+    assert (tmp_path / "psp" / "PSP" / "GAME" / "FasterARK" / "EBOOT.PBP").read_bytes() == b"ark"
+    assert p.status.text().startswith("COPIED AND VERIFIED")
