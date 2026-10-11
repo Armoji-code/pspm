@@ -11,7 +11,7 @@ def test_window_builds_without_psp(tmp_path, monkeypatch):
     monkeypatch.setattr(app.device, "find", lambda cfg: [])
     QApplication.instance() or QApplication([])
     w = app.Main(config.load(tmp_path / "x"))
-    assert w.hero.text() == "NO PSP" and w.nav.count() == 4
+    assert w.hero.text() == "NO PSP" and w.nav.count() == 5
 
 
 def test_tagger_page_edit_save_sort(tmp_path):
@@ -75,3 +75,20 @@ def test_backup_page_backs_up_on_plug_in(tmp_path, monkeypatch):
     p.job.wait()
     app.processEvents()
     assert got == {"PSPM/PSP/SAVEDATA/ULUS1/DATA.BIN": b"save"} and p.status.text() == "BACKED UP 1 FILES"
+
+
+def test_diag_page_shows_info_and_pending_test(tmp_path):
+    from pspm import device
+    from pspm.features.diag import DiagPage
+
+    cfg = config.load(tmp_path / "x")
+    (tmp_path / "PSP" / "COMMON").mkdir(parents=True)
+    (tmp_path / "PSP" / "COMMON" / "pspm_info.txt").write_text("firmware=6.61\n")
+    QApplication.instance() or QApplication([])
+    p = DiagPage(cfg)
+    p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
+    shown = [p.grid.itemAt(i).widget().text() for i in range(p.grid.count())]
+    assert "FIRMWARE" in shown and "6.61" in shown and p.test.text() == "TEST CAPACITY"
+    (tmp_path / "PSPM_TEST").mkdir()
+    p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
+    assert p.test.text() == "VERIFY CAPACITY"

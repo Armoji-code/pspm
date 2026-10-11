@@ -1,5 +1,7 @@
 import subprocess
+import tempfile
 import winreg
+from pathlib import Path
 
 from . import launch_command
 
@@ -19,3 +21,15 @@ def autostart_remove() -> None:
             winreg.DeleteValue(k, NAME)
         except FileNotFoundError:
             pass
+
+
+def fs_check(device: str) -> tuple[int, str]:
+    # chkdsk needs admin: run it elevated (UAC prompt) and collect its output through a file.
+    drive = device.rstrip("\\")  # "E:\\" -> "E:"
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "chkdsk.txt"
+        ps = (f"$p = Start-Process cmd -Verb RunAs -Wait -PassThru -WindowStyle Hidden "
+              f"-ArgumentList '/c chkdsk {drive} > \"{out}\" 2>&1'; exit $p.ExitCode")
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           capture_output=True, text=True, errors="replace", check=False)
+        return r.returncode, out.read_text(errors="replace") if out.exists() else r.stderr
