@@ -3,14 +3,17 @@
 The chosen stick folders are mirrored to <remote_folder>/ in the cloud with the stick's layout
 (e.g. PSPM/PSP/SAVEDATA/ULUS10041DATA00/DATA.BIN). Only files whose size or mtime changed since
 the last backup are uploaded. Nothing is deleted in the cloud; overwritten files stay in the
-provider's own version history. Sign-in is OAuth in the browser with PKCE; the refresh token is
-kept in the OS keyring, never in config.
+provider's own version history. Restore downloads the folder back onto the stick; files it would
+change are moved to a folder on the PC first. Sign-in is OAuth in the browser with PKCE; the
+refresh token is kept in the OS keyring, never in config.
 """
 import base64
+import filecmp
 import hashlib
 import http.server
 import json
 import secrets
+import shutil
 import time
 import urllib.parse
 import urllib.request
@@ -26,6 +29,7 @@ from platformdirs import user_data_path
 from .saves import TMP
 
 STATE = user_data_path("pspm") / "backup.json"
+RESTORE_BACKUPS = user_data_path("pspm") / "restore-backups"
 KEYRING = "pspm"
 
 
@@ -34,6 +38,11 @@ def _http(url, data=None, headers=None, method=None, timeout=120):
     with urllib.request.urlopen(req, timeout=timeout) as r:
         body = r.read()
     return json.loads(body) if body else {}
+
+
+def _download(url, headers, f, data=None):
+    with urllib.request.urlopen(urllib.request.Request(url, data, headers), timeout=600) as r:
+        shutil.copyfileobj(r, f)
 
 
 def _form(url, fields):
@@ -58,6 +67,14 @@ class Provider:
         """Upload file object `f` to `path` (slash separated), replacing what's there."""
         raise NotImplementedError
 
+    def files(self, folder: str) -> dict[str, tuple[int, str]]:
+        """Every file under `folder`: path relative to it -> (size, ref for get)."""
+        raise NotImplementedError
+
+    def get(self, ref: str, f) -> None:
+        """Download the file `ref` (from files) into file object `f`."""
+        raise NotImplementedError
+
 
 class Dropbox(Provider):
     title = "DROPBOX"
@@ -79,6 +96,22 @@ class Dropbox(Provider):
             self._up("upload_session/append_v2", {"cursor": {"session_id": sid, "offset": off}}, f.read(chunk))
             off += chunk
         self._up("upload_session/finish", {"cursor": {"session_id": sid, "offset": off}, "commit": commit}, f.read())
+
+    def files(self, folder):
+        api, h = self.cfg["api_url"], {**self.auth, "Content-Type": "application/json"}
+        r = _http(f"{api}/files/list_folder", json.dumps({"path": f"/{folder}", "recursive": True}).encode(), h)
+        out = {}
+        while True:
+            for e in r["entries"]:
+                if e[".tag"] == "file":
+                    out[e["path_display"][len(folder) + 2:]] = (e["size"], e["path_lower"])
+            if not r["has_more"]:
+                return out
+            r = _http(f"{api}/files/list_folder/continue", json.dumps({"cursor": r["cursor"]}).encode(), h)
+
+    def get(self, ref, f):
+        h = {**self.auth, "Content-Type": "text/plain; charset=dropbox-cors-hack", "Dropbox-API-Arg": json.dumps({"path": ref})}
+        _download(f"{self.cfg['content_url']}/files/download", h, f, b"")
 
 
 class GoogleDrive(Provider):
@@ -125,6 +158,28 @@ class GoogleDrive(Provider):
             session = r.headers["Location"]
         _http(session, f, {"Content-Length": str(size)}, "PUT", timeout=600)
 
+    def files(self, folder):
+        out, todo = {}, [(self._folder(folder.split("/")), "")]
+        while todo:
+            pid, pre = todo.pop()
+            page = ""
+            while True:
+                q = {"q": f"'{pid}' in parents and trashed = false", "pageSize": 1000, "pageToken": page,
+                     "fields": "nextPageToken, files(id, name, mimeType, size)"}
+                r = _http(f"{self.cfg['api_url']}/files?" + urllib.parse.urlencode(q), headers=self.auth)
+                for f in r["files"]:
+                    if f["mimeType"] == self.FOLDER:
+                        todo.append((f["id"], f"{pre}{f['name']}/"))
+                    else:
+                        out[pre + f["name"]] = (int(f.get("size", 0)), f["id"])
+                page = r.get("nextPageToken")
+                if not page:
+                    break
+        return out
+
+    def get(self, ref, f):
+        _download(f"{self.cfg['api_url']}/files/{ref}?alt=media", self.auth, f)
+
 
 BUILTIN = {"gdrive": GoogleDrive, "dropbox": Dropbox}
 
@@ -158,7 +213,7 @@ def login(cls, pcfg: dict, cfg: dict) -> str:
         def log_message(self, *_):
             pass
 
-    srv = http.server.HTTPServer(("127.0.0.1", cfg["redirect_port"]), Handler)
+    srv = http.server.HTTPServer(("127.0.0.1", pcfg.get("redirect_port", cfg["redirect_port"])), Handler)
     redirect = f"http://127.0.0.1:{srv.server_port}/"
     params = {
         "client_id": pcfg["client_id"], "redirect_uri": redirect, "response_type": "code", "state": state,
@@ -233,3 +288,27 @@ def run(provider: Provider, files: dict[str, Path], done: dict, remote: str, sav
         done[rel] = sig
         save()
     return len(todo)
+
+
+def restore(provider: Provider, root: Path, remote: str, done: dict, backups: Path = RESTORE_BACKUPS) -> int:
+    """Download every file in `remote` to the same place on the stick. Files that differ are moved to
+    a dated folder under `backups` first. Returns how many files changed on the stick."""
+    run, n = backups / time.strftime("%Y%m%d-%H%M%S"), 0
+    for rel, (_, ref) in sorted(provider.files(remote).items()):
+        dst = root / rel
+        if any(part in ("", ".", "..") for part in rel.split("/")) or not dst.resolve().is_relative_to(root.resolve()):
+            raise OSError(f"refusing to restore outside the PSP: {rel}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_name(dst.name + TMP)  # downloaded beside it, so an unplug leaves the old file in place
+        with tmp.open("wb") as f:
+            provider.get(ref, f)
+        if dst.is_file() and filecmp.cmp(dst, tmp, shallow=False):
+            tmp.unlink()
+        else:
+            if dst.exists():
+                (run / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(dst, run / rel)
+            tmp.rename(dst)
+            n += 1
+        done[rel] = _sig(dst)  # it matches the cloud, so the next backup doesn't upload it again
+    return n

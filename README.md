@@ -25,35 +25,25 @@ If PPSSPP isn't found (portable install, custom memstick), press PPSSPP FOLDER a
 
 ## Cloud backup
 
-Each time the PSP is plugged in, PSPM uploads new and changed files from `PSP/SAVEDATA` to a `PSPM` folder in your Dropbox or Google Drive, keeping the stick's layout.
-Nothing is ever deleted in the cloud, and both clouds keep older versions of overwritten files. Back up more folders with `folders = ["saves", "music", "photos"]` under `[backup]` in your `config.toml`.
-Sign in once from the CLOUD BACKUP page; it happens in your browser and the token is stored in your OS keyring (Windows Credential Manager, or GNOME Keyring / KWallet on Linux).
+Open CLOUD BACKUP, press SIGN IN TO GOOGLE DRIVE, approve in your browser, and type a folder name (default `PSPM`).
+From then on, each time the PSP is plugged in PSPM uploads new and changed files from `PSP/SAVEDATA` to that folder in your Drive, keeping the stick's layout. RESTORE copies the folder back to the PSP; any file on the PSP it would change is moved to a `restore-backups` folder on your PC first.
+Nothing is ever deleted in the cloud, and Drive keeps older versions of overwritten files. Back up more folders with `folders = ["saves", "music", "photos"]` under `[backup]` in your `config.toml`.
+PSPM only gets the `drive.file` permission: it sees the files it made, not the rest of your Drive. The sign-in token is stored in your OS keyring (Windows Credential Manager, or GNOME Keyring / KWallet on Linux).
 
-PSPM has no shared app key, so you register your own app once (free, about five minutes) and put its id in your `config.toml`:
+**PSPM's Google client.** One-button sign-in uses PSPM's own Google OAuth client, set once in `[backup.gdrive]` in `defaults.toml`. To make one (for a fork, or to use your own in `config.toml`):
+1. At https://console.cloud.google.com create a project, then under APIs & Services > Library enable the Google Drive API.
+2. Under Google Auth Platform, press Get started: any app name, your email, audience External.
+3. Under Audience press Publish app, so it's In production (Testing mode signs everyone out every 7 days). With only `drive.file` no Google review is needed.
+4. Under Clients, create a client of type Desktop app and copy its Client ID and Client secret into `client_id` and `client_secret`.
 
-**Dropbox**
-1. Go to https://www.dropbox.com/developers/apps, Create app, choose Scoped access and App folder, and give it any name.
-2. On the Permissions tab tick `files.content.write` and press Submit.
-3. On the Settings tab add the redirect URI `http://127.0.0.1:53682/`, and copy the App key.
-4. In `config.toml`:
-   ```toml
-   [backup.dropbox]
-   client_id = "your app key"
-   ```
+**Dropbox** also works, but needs an app of your own: at https://www.dropbox.com/developers/apps create a Scoped access, App folder app, tick `files.content.write` and `files.content.read` under Permissions, add the redirect URI `http://127.0.0.1:53682/`, and put the App key in `config.toml`:
+```toml
+[backup]
+provider = "dropbox"
 
-**Google Drive**
-1. At https://console.cloud.google.com create a project and enable the Google Drive API.
-2. Set up the OAuth consent screen (External) and set its publishing status to In production. Testing mode makes you sign in again every 7 days. PSPM only asks for the `drive.file` scope (its own files), which needs no Google review.
-3. Under Credentials, create an OAuth client ID of type Desktop app and copy its id and secret.
-4. In `config.toml`:
-   ```toml
-   [backup]
-   provider = "gdrive"
-
-   [backup.gdrive]
-   client_id = "....apps.googleusercontent.com"
-   client_secret = "..."
-   ```
+[backup.dropbox]
+client_id = "your app key"
+```
 
 Other clouds can be added by another package: subclass `pspm.backup.Provider` and register it under the `pspm.cloud` entry point.
 

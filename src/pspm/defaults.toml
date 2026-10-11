@@ -56,31 +56,36 @@ auto_sync = true          # sync on plug-in when nothing conflicts; conflicts al
 windows = ["{documents}/PPSSPP/PSP"]
 linux = ["~/.config/ppsspp/PSP", "~/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP"]
 
-# Cloud backup. Mirrors the folders below to the cloud on plug-in, uploading only changed files.
-# Nothing is deleted in the cloud. Sign-in happens in your browser; the token is kept in the OS keyring.
+# Cloud backup. Mirrors the folders below to a cloud folder on plug-in, uploading only changed files, and RESTORE
+# downloads that folder back to the stick. Nothing is deleted in the cloud. Sign-in happens in your browser; the token
+# is kept in the OS keyring.
 [backup]
-provider = "dropbox"      # gdrive | dropbox | any provider registered under the "pspm.cloud" entry point
+provider = "gdrive"       # gdrive | dropbox | any provider registered under the "pspm.cloud" entry point
 auto = true               # back up on plug-in once signed in
 folders = ["saves"]       # labels from [device.folders], e.g. ["saves", "music", "photos"]
-remote_folder = "PSPM"    # top folder in the cloud; the stick's layout is kept under it
-redirect_port = 53682     # browser sign-in returns to http://127.0.0.1:<port>/ (register this in your app)
+remote_folder = "PSPM"    # cloud folder, changeable in the app; "Backups/PSP" makes nested folders
+redirect_port = 0         # browser sign-in returns to http://127.0.0.1:<port>/; 0 = any free port (Dropbox needs a fixed one)
 login_timeout_seconds = 300
 
-# Each provider needs an app registration of your own (see README); put its id in your config.toml.
-[backup.dropbox]
-client_id = ""            # the Dropbox app key (PKCE, no secret needed)
-auth_url = "https://www.dropbox.com/oauth2/authorize"
-token_url = "https://api.dropboxapi.com/oauth2/token"
-content_url = "https://content.dropboxapi.com/2"
-chunk_mb = 64             # files bigger than this upload in parts (Dropbox caps one request at 150 MB)
-
+# PSPM's own Google OAuth client (type "Desktop app", scope drive.file), so signing in is one button. Google treats a
+# desktop app's secret as not confidential. To use your own client instead, set both in your config.toml.
 [backup.gdrive]
-client_id = ""            # OAuth client of type "Desktop app"
-client_secret = ""        # Google issues one even for desktop apps; keep it in your config.toml, not in the repo
+client_id = ""
+client_secret = ""
 auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
 token_url = "https://oauth2.googleapis.com/token"
 api_url = "https://www.googleapis.com/drive/v3"
 upload_url = "https://www.googleapis.com/upload/drive/v3"
+
+# Dropbox needs an app of your own (see README); put its key in your config.toml.
+[backup.dropbox]
+client_id = ""            # the Dropbox app key (PKCE, no secret needed)
+redirect_port = 53682     # register http://127.0.0.1:53682/ in your app
+auth_url = "https://www.dropbox.com/oauth2/authorize"
+token_url = "https://api.dropboxapi.com/oauth2/token"
+api_url = "https://api.dropboxapi.com/2"
+content_url = "https://content.dropboxapi.com/2"
+chunk_mb = 64             # files bigger than this upload in parts (Dropbox caps one request at 150 MB)
 
 # Diagnostics. Battery, firmware and model can't be read over USB: the PSPM Info app (installed from the
 # DIAGNOSTICS page, needs custom firmware) writes them to info_file when run on the PSP.
