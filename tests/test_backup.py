@@ -91,3 +91,45 @@ def test_drive_creates_folders_then_uploads(monkeypatch):
         ("POST", "https://U/files", {"name": "DATA.BIN", "parents": ["id4"]}),
         ("PUT", "https://upload/session"),
     ]
+
+
+class Cloud(Fake):
+    def files(self, folder):
+        return {rel[len(folder) + 1:]: (len(data), rel) for rel, data in self.got.items() if rel.startswith(folder + "/")}
+
+    def get(self, ref, f):
+        f.write(self.got[ref])
+
+
+def test_restore_writes_changed_files_and_keeps_the_old_ones(tmp_path):
+    psp, old = tmp_path / "psp", tmp_path / "old"
+    (psp / "PSP" / "SAVEDATA" / "A").mkdir(parents=True)
+    (psp / "PSP" / "SAVEDATA" / "A" / "DATA.BIN").write_bytes(b"new")
+    (psp / "PSP" / "SAVEDATA" / "A" / "SAME.BIN").write_bytes(b"same")
+    c = Cloud()
+    c.got = {"PSPM/PSP/SAVEDATA/A/DATA.BIN": b"cloud", "PSPM/PSP/SAVEDATA/A/SAME.BIN": b"same",
+             "PSPM/PSP/SAVEDATA/B/DATA.BIN": b"b", "Other/x": b"no"}
+    done = {}
+    assert backup.restore(c, psp, "PSPM", done, old) == 2
+    assert (psp / "PSP/SAVEDATA/A/DATA.BIN").read_bytes() == b"cloud" and (psp / "PSP/SAVEDATA/B/DATA.BIN").exists()
+    assert [p.read_bytes() for p in old.rglob("*.BIN")] == [b"new"] and not list(psp.rglob("*.pspm-tmp"))
+    assert backup.pending(backup.scan(psp, [psp / "PSP"]), done) == []  # restored files don't upload again
+    c.got = {"PSPM/../evil": b"x"}
+    try:
+        backup.restore(c, psp, "PSPM", done, old)
+        raise AssertionError("restored outside the stick")
+    except OSError:
+        assert not (tmp_path / "evil").exists()
+
+
+def test_drive_lists_a_folder_tree(monkeypatch):
+    pages = {
+        "F": [{"files": [{"id": "s", "name": "SAVE", "mimeType": backup.GoogleDrive.FOLDER}], "nextPageToken": "2"},
+              {"files": [{"id": "r", "name": "README", "mimeType": "text/plain", "size": "3"}]}],
+        "s": [{"files": [{"id": "d", "name": "DATA.BIN", "mimeType": "application/octet-stream", "size": "7"}]}],
+    }
+    monkeypatch.setattr(backup, "_http", lambda url, headers=None: pages[
+        dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))["q"].split("'")[1]].pop(0))
+    g = backup.GoogleDrive.__new__(backup.GoogleDrive)
+    g.cfg, g.auth, g.dirs = {"api_url": "https://A"}, {}, {"PSPM": "F"}
+    assert g.files("PSPM") == {"README": (3, "r"), "SAVE/DATA.BIN": (7, "d")}

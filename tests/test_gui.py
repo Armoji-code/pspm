@@ -64,6 +64,12 @@ def test_backup_page_backs_up_on_plug_in(tmp_path, monkeypatch):
         def put(self, path, f, size):
             got[path] = f.read()
 
+        def files(self, folder):
+            return {"PSP/SAVEDATA/ULUS1/DATA.BIN": (5, "r")}
+
+        def get(self, ref, f):
+            f.write(b"cloud")
+
     monkeypatch.setitem(backup.BUILTIN, "fake", Fake)
     monkeypatch.setattr(backup, "token", lambda pid: "T")
     cfg = config.load(tmp_path / "x")
@@ -71,11 +77,16 @@ def test_backup_page_backs_up_on_plug_in(tmp_path, monkeypatch):
     (tmp_path / "psp" / "PSP" / "SAVEDATA" / "ULUS1").mkdir(parents=True)
     (tmp_path / "psp" / "PSP" / "SAVEDATA" / "ULUS1" / "DATA.BIN").write_bytes(b"save")
     app = QApplication.instance() or QApplication([])
-    p = BackupPage(cfg, tmp_path / "b.json")
+    p = BackupPage(cfg, tmp_path / "b.json", tmp_path / "old")
     p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
     p.job.wait()
     app.processEvents()
     assert got == {"PSPM/PSP/SAVEDATA/ULUS1/DATA.BIN": b"save"} and p.status.text() == "BACKED UP 1 FILES"
+    p.restore()
+    p.job.wait()
+    app.processEvents()
+    assert (tmp_path / "psp" / "PSP" / "SAVEDATA" / "ULUS1" / "DATA.BIN").read_bytes() == b"cloud"
+    assert p.status.text().startswith("RESTORED 1 FILES")
 
 
 def test_diag_page_shows_info_and_pending_test(tmp_path):
