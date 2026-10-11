@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup). See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics from phase 3. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -56,6 +56,13 @@ PSPM has no shared app key, so you register your own app once (free, about five 
    ```
 
 Other clouds can be added by another package: subclass `pspm.backup.Provider` and register it under the `pspm.cloud` entry point.
+
+## Diagnostics
+
+- **Space**: used, free and total on the memory stick.
+- **Check filesystem**: a read-only check (`fsck.vfat -n` on Linux, `chkdsk` on Windows). Both need admin rights, so you get a password or UAC prompt. Nothing is repaired.
+- **Test capacity**: finds fake memory sticks. PSPM fills the free space with test data; you unplug and replug the PSP, then press VERIFY CAPACITY to read it back, and the test data is deleted. It takes a while on a big stick. On a fake card, writing past its real size can damage files already on it, so back up first.
+- **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM Info* from the PSP's Game menu (needs custom firmware), and the next time you plug in PSPM shows them. The app's source is in `psp/pspm_info` and CI builds it with the PSPDEV toolchain.
 
 ## Change things without touching code
 

@@ -1,5 +1,6 @@
 import os
 import shlex
+import subprocess
 from pathlib import Path
 
 from . import launch_command
@@ -18,3 +19,10 @@ def autostart_install() -> Path:
 
 def autostart_remove() -> None:
     ENTRY.unlink(missing_ok=True)
+
+
+def fs_check(device: str) -> tuple[int, str]:
+    # pkexec asks for the password in a desktop dialog; reading the raw partition needs root.
+    r = subprocess.run(["pkexec", "fsck.vfat", "-n", device], capture_output=True, text=True, errors="replace",
+                       check=False)
+    return r.returncode, r.stdout + r.stderr
