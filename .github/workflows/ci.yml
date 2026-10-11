@@ -43,7 +43,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make -C psp/pspm_info
-      - run: find /usr/local/pspdev -iname '*kubridge*' -o -iname '*getmodel*'  # temporary: looking for a model API
       - uses: actions/upload-artifact@v4
         with:
           name: pspm-info-eboot
