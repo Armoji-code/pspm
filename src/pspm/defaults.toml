@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files"]
+features = ["files", "tagger"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -24,6 +24,17 @@ saves = "PSP/SAVEDATA"
 music = "MUSIC"
 photos = "PICTURE"
 video = "VIDEO"
+
+# MP3 tagger. Lookups use MusicBrainz + Cover Art Archive: free, no account or key.
+[tagger]
+musicbrainz_url = "https://musicbrainz.org/ws/2"
+coverart_url = "https://coverartarchive.org"
+user_agent = "PSPM/0.1 (https://github.com/Armoji-code/pspm)"  # MusicBrainz requires an identifying agent
+request_gap_seconds = 1.0  # MusicBrainz allows 1 request per second
+timeout_seconds = 15
+min_score = 90             # 0-100 MusicBrainz match score; lower finds more but guesses more
+cover_size = 500           # px, longest side; covers are saved as baseline JPEG for the PSP
+sort_by = "album"          # album | artist | genre
 
 [themes.dark]
 bg = "#000000"

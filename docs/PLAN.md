@@ -42,7 +42,7 @@ PSP detection: psutil checks mounted drives every 2 seconds. This works on every
 | 1 | File manager | **Built (phase 1).** Folder per category from config: games, isos, plugins, themes, saves, music, photos, video. Add, list, delete (asks first). | low |
 | 2 | Diagnostics | Card: free space, filesystem check (`chkdsk` / `fsck.vfat -n`), and a fake-capacity test written in Python (write seeded data, read back). Battery, firmware and model can't be read over USB, so we ship a tiny PSP homebrew app that writes them to `PSP/COMMON/pspm_info.txt` for PSPM to read next time it's plugged in. | medium, needs PSP SDK build |
 | 3 | Theme maker | Phase A: install and preview PTF/CTF, auto-set the CXMB plugin needed for CTF. Phase B: ARK launcher themes (`THEME.ARK`, open format, Python tool exists). Phase C: PTF/CTF editor. No open-source PTF/CTF builder exists, so C means reverse-engineering the format. | high for C |
-| 4 | MP3 tagger | mutagen for tags (writes ID3v2.3, which the PSP reads best), MusicBrainz + Cover Art Archive for names and covers (free, 1 request/s), optional AcoustID fingerprints for untagged files (free key). Covers resized to 500 px baseline JPEG. Sort by album, artist or genre into `MUSIC/`. | low |
+| 4 | MP3 tagger | **Built (phase 2).** Edit tags in a table, FIND TAGS fills them online, SAVE writes, SORT moves into album/artist/genre folders. AcoustID not added yet. mutagen for tags (writes ID3v2.3, which the PSP reads best), MusicBrainz + Cover Art Archive for names and covers (free, 1 request/s), optional AcoustID fingerprints for untagged files (free key). Covers resized to 500 px baseline JPEG. Sort by album, artist or genre into `MUSIC/`. | low |
 | 5 | PS1 converter | Call pop-fe (Python, LGPL) or PSXPackager (MIT, .NET CLI) as a subprocess. We never ship BIOS or games. | low |
 | 6 | Streaming | PSP to PC: RemoteJoyLite (Kethen fork, works with ARK, Windows native, Linux via Wine, needs a libusb driver). PC to PSP: no maintained tool exists (PSPDisp is dead), so this would be new work. While streaming, USB storage is off, so PSPM has to switch modes. | high |
 | 7 | Cloud backup | Google Drive (`drive.file` scope, sign in in the browser) and Dropbox (PKCE, no secret) behind one small provider interface. Backs up saves first, then anything picked. | medium |
@@ -56,7 +56,7 @@ Research notes: ARK-4's final release was in May 2026 and the repo was archived 
 | Phase | Scope | State |
 |-------|-------|-------|
 | 1 | Core, config, PSP detection, open on plug-in (login watcher), file manager, Docker, CI for Windows + Linux | scaffolded, 5 tests pass, Linux app build checked |
-| 2 | MP3 tagger, PPSSPP save sync, cloud backup | next |
+| 2 | MP3 tagger, PPSSPP save sync, cloud backup | tagger built; save sync and backup next |
 | 3 | Diagnostics (+ PSP info app), PS1 converter, themes A + B | |
 | 4 | Softmod with safety checks (ARK-5 via FasterARK and ARK-4 final, user picks in the app), PSP to PC streaming | |
 | 5 | Theme editor (C), PC to PSP streaming, macOS, mobile shell | later |

@@ -7,7 +7,7 @@ name = "pspm"
 dynamic = ["version"]
 description = "Manager and companion app for the Sony PSP"
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.6", "psutil>=5.9", "platformdirs>=4"]
+dependencies = ["PySide6>=6.6", "psutil>=5.9", "platformdirs>=4", "mutagen>=1.47", "Pillow>=10"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "pyinstaller>=6"]

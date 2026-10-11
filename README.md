@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager). See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and the MP3 tagger from phase 2. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
