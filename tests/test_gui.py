@@ -187,3 +187,23 @@ def test_themes_page_new_and_build_copies_to_psp(tmp_path):
     p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
     p.build()
     assert (tmp_path / "psp" / "PSP" / "THEME" / "Night.ptf").is_file(), p.status.text()
+
+
+def test_files_page_tabs_and_double_click(tmp_path):
+    from pspm import device
+    from pspm.features.files import FilesPage
+
+    cfg = config.load(tmp_path / "x")
+    (tmp_path / "PSP" / "GAME" / "CAT_PS1" / "MGS").mkdir(parents=True)
+    (tmp_path / "PSP" / "GAME" / "Loose").mkdir()
+    QApplication.instance() or QApplication([])
+    p = FilesPage(cfg)
+    p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
+    names = lambda: [p.items.topLevelItem(i).text(0) for i in range(p.items.topLevelItemCount())]
+    assert [p.tabs.tabText(i) for i in range(p.tabs.count())] == ["uncategorized", "PS1"] and names() == ["Loose/"]
+    p.tabs.setCurrentIndex(1)
+    assert names() == ["MGS/"]
+    p.enter(p.items.topLevelItem(0))
+    assert names() == ["../"] and p.sub == "CAT_PS1/MGS"
+    p.enter(p.items.topLevelItem(0))
+    assert names() == ["MGS/"]

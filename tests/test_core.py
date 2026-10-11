@@ -1,4 +1,5 @@
 import json
+import struct
 
 import pytest
 
@@ -64,3 +65,37 @@ def test_mount_psps_mounts_once_per_plug(monkeypatch):
     linux.mount_psps()  # the user unmounted it again: leave it alone
     assert [c for c in calls if c[0] == "udisksctl"] == [["udisksctl", "mount", "--no-user-interaction", "-b",
                                                           "/dev/sda1"]]
+
+
+def _sfo(**vals):
+    keys = b"".join(k.encode() + b"\0" for k in vals)
+    data = b"".join(v.encode().ljust(32, b"\0") for v in vals.values())
+    index, ko = b"", 0
+    for i, (k, v) in enumerate(vals.items()):
+        index += struct.pack("<HHIII", ko, 0x0204, len(v) + 1, 32, 32 * i)
+        ko += len(k) + 1
+    head = 20 + len(index)
+    return b"\0PSF" + struct.pack("<IIII", 0x101, head, head + len(keys), len(vals)) + index + keys + data
+
+
+def test_cat_tabs_subfolders_and_save_titles(dev, tmp_path):
+    games = dev.path("games")
+    (games / "CAT_GBA" / "gpSP").mkdir(parents=True)
+    (games / "CAT_GBA" / "gpSP" / "EBOOT.PBP").write_bytes(b"x")
+    (games / "Loose").mkdir()
+    assert files.tabs(dev, "games", "CAT_") == ["CAT_GBA"]
+    assert [e.name for e in files.list_items(dev, "games", skip=["CAT_GBA"])] == ["Loose"]
+    assert [e.name for e in files.list_items(dev, "games", "CAT_GBA/gpSP")] == ["EBOOT.PBP"]
+    src = tmp_path / "a.txt"
+    src.write_text("a")
+    files.copy_in(dev, "games", [src], "CAT_GBA")
+    files.remove(dev, "games", "CAT_GBA/a.txt")
+    with pytest.raises(ValueError):
+        files.list_items(dev, "games", "CAT_GBA/../..")
+
+    save = dev.path("saves") / "ULUS10041DATA00"
+    save.mkdir(parents=True)
+    (save / "PARAM.SFO").write_bytes(_sfo(TITLE="Lumines", SAVEDATA_TITLE="Slot 1"))
+    (save / "ICON0.PNG").write_bytes(b"png")
+    e = files.list_items(dev, "saves")[0]
+    assert (e.name, e.title, e.icon) == ("ULUS10041DATA00", "Lumines · Slot 1", str(save / "ICON0.PNG"))
