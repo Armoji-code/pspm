@@ -1,0 +1,48 @@
+# PSPM defaults. Override any key in the user config file
+# (path printed by `pspm config`), e.g. to add a folder or disable a feature.
+
+[app]
+theme = "dark"            # dark | light (see [themes.*])
+poll_seconds = 2          # how often to look for a plugged-in PSP
+open_on_connect = true    # `pspm watch` opens the app when a PSP appears
+
+# Features shown in the sidebar, in order. Third-party features register
+# under the "pspm.features" entry point and are enabled by adding their id here.
+features = ["files"]
+
+[device]
+# A mounted drive counts as a PSP when this folder exists at its root.
+marker = "PSP"
+
+# File manager categories: label -> folder on the memory stick.
+[device.folders]
+games = "PSP/GAME"
+isos = "ISO"
+plugins = "SEPLUGINS"
+themes = "PSP/THEME"
+saves = "PSP/SAVEDATA"
+music = "MUSIC"
+photos = "PICTURE"
+video = "VIDEO"
+
+[themes.dark]
+bg = "#000000"
+surface = "#111111"
+border = "#333333"
+text = "#E8E8E8"
+text_secondary = "#999999"
+text_disabled = "#666666"
+display = "#FFFFFF"
+accent = "#D71921"
+success = "#4A9E5C"
+
+[themes.light]
+bg = "#F5F5F5"
+surface = "#FFFFFF"
+border = "#CCCCCC"
+text = "#1A1A1A"
+text_secondary = "#666666"
+text_disabled = "#999999"
+display = "#000000"
+accent = "#D71921"
+success = "#4A9E5C"

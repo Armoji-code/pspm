@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pspm"
+dynamic = ["version"]
+description = "Manager and companion app for the Sony PSP"
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.6", "psutil>=5.9", "platformdirs>=4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5", "pyinstaller>=6"]
+
+[project.scripts]
+pspm = "pspm.__main__:main"
+
+# Third-party features register here, e.g.:
+# [project.entry-points."pspm.features"]
+# mytool = "mypkg.feature:FEATURE"
+
+[tool.setuptools.dynamic]
+version = { attr = "pspm.__version__" }
+
+[tool.setuptools.package-data]
+pspm = ["*.toml"]
+
+[tool.ruff]
+line-length = 120
