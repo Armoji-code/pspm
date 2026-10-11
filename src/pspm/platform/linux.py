@@ -1,4 +1,5 @@
 import ctypes.util
+import json
 import os
 import shlex
 import shutil
@@ -21,6 +22,27 @@ def autostart_install() -> Path:
 
 def autostart_remove() -> None:
     ENTRY.unlink(missing_ok=True)
+
+
+_tried: set[str] = set()  # partitions mounted once per plug-in, so a manual unmount sticks
+
+
+def mount_psps() -> None:
+    """Mount PSP partitions the desktop left unmounted (no automount); udisks needs no root for USB drives."""
+    try:
+        out = subprocess.run(["lsblk", "-Jl", "-o", "PATH,PKNAME,MODEL,MOUNTPOINT,FSTYPE"], capture_output=True,
+                             text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return
+    devs = json.loads(out)["blockdevices"]
+    psps = {d["path"].rsplit("/", 1)[-1] for d in devs if "PSP" in (d["model"] or "")}
+    parts = {d["path"]: d["mountpoint"] for d in devs if d["pkname"] in psps and d["fstype"]}
+    _tried.intersection_update(parts)  # unplugged ones get a fresh try next time
+    for path, mountpoint in parts.items():
+        if path not in _tried and not mountpoint and shutil.which("udisksctl"):
+            _tried.add(path)
+            subprocess.run(["udisksctl", "mount", "--no-user-interaction", "-b", path], capture_output=True,
+                           check=False)
 
 
 def fs_check(device: str) -> tuple[int, str]:
