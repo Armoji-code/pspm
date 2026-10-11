@@ -7,7 +7,7 @@ name = "pspm"
 dynamic = ["version"]
 description = "Manager and companion app for the Sony PSP"
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.6", "psutil>=5.9", "platformdirs>=4", "mutagen>=1.47", "Pillow>=10"]
+dependencies = ["PySide6>=6.6", "psutil>=5.9", "platformdirs>=4", "mutagen>=1.47", "Pillow>=10", "keyring>=24"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "pyinstaller>=6"]
@@ -18,6 +18,9 @@ pspm = "pspm.__main__:main"
 # Third-party features register here, e.g.:
 # [project.entry-points."pspm.features"]
 # mytool = "mypkg.feature:FEATURE"
+# Cloud backup providers likewise, as a subclass of pspm.backup.Provider:
+# [project.entry-points."pspm.cloud"]
+# mycloud = "mypkg.cloud:MyCloud"
 
 [tool.setuptools.dynamic]
 version = { attr = "pspm.__version__" }

@@ -11,7 +11,7 @@ def test_window_builds_without_psp(tmp_path, monkeypatch):
     monkeypatch.setattr(app.device, "find", lambda cfg: [])
     QApplication.instance() or QApplication([])
     w = app.Main(config.load(tmp_path / "x"))
-    assert w.hero.text() == "NO PSP" and w.nav.count() == 3
+    assert w.hero.text() == "NO PSP" and w.nav.count() == 4
 
 
 def test_tagger_page_edit_save_sort(tmp_path):
@@ -46,3 +46,32 @@ def test_saves_page_auto_syncs_on_plug_in(tmp_path):
         app.processEvents()
     assert (tmp_path / "pc" / "ULUS1" / "DATA.BIN").read_bytes() == b"save"
     assert p.status.text() == "SYNCED 1 SAVES"
+
+
+def test_backup_page_backs_up_on_plug_in(tmp_path, monkeypatch):
+    from pspm import backup, device
+    from pspm.features.backup import BackupPage
+
+    got = {}
+
+    class Fake(backup.Provider):
+        title = "FAKE"
+
+        def __init__(self, pcfg, token):
+            assert token == "T"
+
+        def put(self, path, f, size):
+            got[path] = f.read()
+
+    monkeypatch.setitem(backup.BUILTIN, "fake", Fake)
+    monkeypatch.setattr(backup, "token", lambda pid: "T")
+    cfg = config.load(tmp_path / "x")
+    cfg["backup"]["provider"] = "fake"
+    (tmp_path / "psp" / "PSP" / "SAVEDATA" / "ULUS1").mkdir(parents=True)
+    (tmp_path / "psp" / "PSP" / "SAVEDATA" / "ULUS1" / "DATA.BIN").write_bytes(b"save")
+    app = QApplication.instance() or QApplication([])
+    p = BackupPage(cfg, tmp_path / "b.json")
+    p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
+    p.job.wait()
+    app.processEvents()
+    assert got == {"PSPM/PSP/SAVEDATA/ULUS1/DATA.BIN": b"save"} and p.status.text() == "BACKED UP 1 FILES"

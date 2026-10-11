@@ -14,6 +14,7 @@ BUILTIN = {
     "files": "pspm.features.files:FEATURE",
     "tagger": "pspm.features.tagger:FEATURE",
     "saves": "pspm.features.saves:FEATURE",
+    "backup": "pspm.features.backup:FEATURE",
 }
 
 
