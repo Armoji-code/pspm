@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics from phase 3. See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -63,6 +63,12 @@ Other clouds can be added by another package: subclass `pspm.backup.Provider` an
 - **Check filesystem**: a read-only check (`fsck.vfat -n` on Linux, `chkdsk` on Windows). Both need admin rights, so you get a password or UAC prompt. Nothing is repaired.
 - **Test capacity**: finds fake memory sticks. PSPM fills the free space with test data; you unplug and replug the PSP, then press VERIFY CAPACITY to read it back, and the test data is deleted. It takes a while on a big stick. On a fake card, writing past its real size can damage files already on it, so back up first.
 - **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM Info* from the PSP's Game menu (needs custom firmware), and the next time you plug in PSPM shows them. The app's source is in `psp/pspm_info` and CI builds it with the PSPDEV toolchain.
+
+## PS1 converter
+
+Turns a PS1 game into an `EBOOT.PBP` in `PSP/GAME/<game ID>/`, for the PSP's built-in PS1 emulator (needs custom firmware). Press ADD DISCS and pick one game's images: `.cue` (with its `.bin`), `.img`, `.iso`, `.chd`, `.m3u` or a `.zip`/`.7z`. Several discs become one multi-disc EBOOT, in file name order. The title comes from the disc's game ID; ICON sets an optional icon from any picture.
+
+The conversion is done by [PSXPackager](https://github.com/RupertAvery/PSXPackager) (MIT), downloaded on first use from its GitHub release and checked against the sha256 in `defaults.toml`. On Windows it needs the .NET 8 runtime. PSPM ships no Sony files, BIOS or games.
 
 ## Change things without touching code
 

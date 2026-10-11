@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
@@ -11,7 +12,7 @@ def test_window_builds_without_psp(tmp_path, monkeypatch):
     monkeypatch.setattr(app.device, "find", lambda cfg: [])
     QApplication.instance() or QApplication([])
     w = app.Main(config.load(tmp_path / "x"))
-    assert w.hero.text() == "NO PSP" and w.nav.count() == 5
+    assert w.hero.text() == "NO PSP" and w.nav.count() == 6
 
 
 def test_tagger_page_edit_save_sort(tmp_path):
@@ -92,3 +93,27 @@ def test_diag_page_shows_info_and_pending_test(tmp_path):
     (tmp_path / "PSPM_TEST").mkdir()
     p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
     assert p.test.text() == "VERIFY CAPACITY"
+
+
+def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
+    from pspm import device, ps1
+    from pspm.features.ps1 import Ps1Page
+
+    got = {}
+
+    def fake(discs, games, cfg, icon):
+        got.update(discs=discs, games=games)
+        return games / "SLUS00594"
+
+    monkeypatch.setattr(ps1, "convert", fake)
+    monkeypatch.setattr(ps1, "title", lambda pbp: "Metal Gear Solid")
+    cfg = config.load(tmp_path / "x")
+    app = QApplication.instance() or QApplication([])
+    p = Ps1Page(cfg)
+    p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
+    p.discs.addItems(["d1.cue", "d2.cue"])
+    p.convert()
+    p.job.wait()
+    app.processEvents()
+    assert got == {"discs": [Path("d1.cue"), Path("d2.cue")], "games": tmp_path / "PSP" / "GAME"}
+    assert p.status.text() == "INSTALLED METAL GEAR SOLID TO PSP/GAME/SLUS00594" and not p.discs.count()
