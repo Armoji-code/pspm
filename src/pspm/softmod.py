@@ -5,12 +5,13 @@ PSPM only writes to the memory stick. ARK itself is installed later on the PSP, 
 """
 import hashlib
 import shutil
+import struct
 import time
 from pathlib import Path
 
 from platformdirs import user_data_path
 
-from . import tools
+from . import ps1, tools
 from .device import Device
 
 BACKUPS = user_data_path("pspm") / "softmod-backups"
@@ -58,6 +59,17 @@ def problems(dev: Device, cfg: dict, todo: list[tuple[Path, str]], info: dict) -
 def existing(dev: Device, cfg: dict, ark: str, cipl: bool = False) -> list[str]:
     """Folders on the stick that the copy would replace."""
     return [rel for rel in folders(cfg, ark, cipl).values() if (dev.root / rel).exists()]
+
+
+def installed(dev: Device) -> str | None:
+    """ARK's name from its save folder on the stick ("ARK-4", or "ARK" for ARK-5), None when ARK was never set up."""
+    sfo = dev.root / "PSP/SAVEDATA/ARK_01234/PARAM.SFO"
+    if not sfo.is_file():
+        return None
+    try:
+        return ps1.sfo_title(sfo.read_bytes()) or "ARK"
+    except (struct.error, ValueError):  # a damaged PARAM.SFO still means ARK was there
+        return "ARK"
 
 
 def _sha(p: Path) -> str:

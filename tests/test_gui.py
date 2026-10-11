@@ -173,6 +173,36 @@ def test_softmod_page_needs_boxes_then_copies(tmp_path, monkeypatch):
     assert (tmp_path / "psp" / "PSP" / "GAME" / "CustomIPL" / "EBOOT.PBP").exists()
 
 
+def test_softmod_page_preselects_update_when_ark_is_there(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from pspm import device, softmod
+    from pspm.features.softmod import SoftmodPage
+
+    cfg = config.load(tmp_path / "x")
+    (tmp_path / "upd" / "PSP" / "GAME" / "UPDATE").mkdir(parents=True)
+    (tmp_path / "upd" / "PSP" / "GAME" / "UPDATE" / "EBOOT.PBP").write_bytes(b"upd")
+    monkeypatch.setattr(softmod, "tool", lambda cfg, ark: tmp_path / "upd" if ark == "update" else 1 / 0)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.Yes)
+    ark = tmp_path / "psp" / "PSP" / "SAVEDATA" / "ARK_01234"
+    ark.mkdir(parents=True)
+    (ark / "SETTINGS.TXT").write_text("mine")
+    (ark / "PARAM.SFO").write_bytes(b"x")
+    app = QApplication.instance() or QApplication([])
+    p = SoftmodPage(cfg, tmp_path / "bk")
+    assert p.mode.currentData() == "install" and p.go.text() == "COPY ARK"
+    p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
+    assert p.mode.currentData() == "update" and p.ark.isHidden() and p.cipl.isHidden() and "ALREADY" in p.known.text()
+    for b in (p.fw, p.battery, p.risk):
+        b.setChecked(True)
+    p.install()
+    for _ in range(2):
+        p.job.wait()
+        app.processEvents()
+    assert (tmp_path / "psp" / "PSP" / "GAME" / "UPDATE" / "EBOOT.PBP").read_bytes() == b"upd"
+    assert (ark / "SETTINGS.TXT").read_text() == "mine" and p.status.text().startswith("COPIED AND VERIFIED")
+
+
 def test_themes_page_new_and_build_copies_to_psp(tmp_path):
     from pspm import device
     from pspm.features.themes import ThemesPage

@@ -8,7 +8,7 @@ from .saves import _Job
 ABOUT = """INSTALLS ARK CUSTOM FIRMWARE. PSPM ONLY COPIES THE OFFICIAL ARK FILES TO THE MEMORY STICK; YOU RUN THE INSTALLER ON THE PSP.
 SUPPORTED: EVERY PSP-1000, 2000, 3000, GO AND STREET (E1000) ON OFFICIAL FIRMWARE 6.60 OR 6.61.
 NOT SUPPORTED: OLDER OR NEWER FIRMWARE (UPDATE TO 6.61 FIRST), PS VITA, DEVELOPMENT UNITS.
-ALREADY ON ARK-4? UPDATE FROM ARK'S OWN UPDATER INSTEAD. ON PRO OR ME WITH A PERMANENT CIPL, USE ARK'S DC10 GUIDE.
+ALREADY ON ARK-4 OR ARK-5? CHOOSE UPDATE: IT KEEPS YOUR SETTINGS AND PLUGINS. ON PRO OR ME WITH A PERMANENT CIPL, USE ARK'S DC10 GUIDE.
 ARK IS LOST ON A FULL POWER-OFF UNTIL YOU ALSO INSTALL ITS CIPL ON THE PSP. PSPM COPIES ITS INSTALLER ONLY IF YOU TICK IT BELOW."""
 CIPL_WARNING = """The cIPL installer makes ARK permanent by writing the PSP's flash when you run it.
 If the PSP loses power while it runs, the PSP can be bricked and may only be saved with a Pandora battery.
@@ -23,6 +23,10 @@ class SoftmodPage(QWidget):
         super().__init__()
         self.cfg, self.dev, self.job, self.backups = cfg, None, None, backups
         s = cfg["softmod"]
+        self.mode = QComboBox()
+        self.mode.addItem("INSTALL ARK · FIRST TIME ON THIS PSP", "install")
+        self.mode.addItem(f"UPDATE ARK TO {s['update']['version']} · KEEPS SETTINGS AND PLUGINS", "update")
+        self.mode.currentIndexChanged.connect(self._mode)
         self.ark = QComboBox()
         for key in ("ark5", "ark4"):
             self.ark.addItem(f"{s[key]['name']} {s[key]['version']}".upper(), key)
@@ -35,17 +39,23 @@ class SoftmodPage(QWidget):
         self.cipl = QCheckBox("ALSO COPY THE PERMANENT INSTALLER (CIPL) · IT WRITES THE PSP'S FLASH WHEN YOU RUN IT")
         self.status = QLabel()
         self.status.setObjectName("label")
-        go = QPushButton("COPY ARK")
-        go.clicked.connect(self.install)
+        self.go = QPushButton()
+        self.go.clicked.connect(self.install)
         bar = QHBoxLayout()
         bar.addWidget(self.status, 1)
-        bar.addWidget(go)
+        bar.addWidget(self.go)
         col = QVBoxLayout(self)
-        for w in (QLabel(ABOUT, wordWrap=True), self.ark, self.known, self.fw, self.battery, self.risk, self.cipl):
+        for w in (QLabel(ABOUT, wordWrap=True), self.mode, self.ark, self.known, self.fw, self.battery, self.risk, self.cipl):
             col.addWidget(w)
         col.addStretch(1)
         col.addLayout(bar)
         self.set_device(None)
+
+    def _mode(self):
+        update = self.mode.currentData() == "update"
+        self.ark.setHidden(update)
+        self.cipl.setHidden(update)
+        self.go.setText("COPY UPDATER" if update else "COPY ARK")
 
     def set_device(self, dev):
         self.dev = dev
@@ -59,6 +69,11 @@ class SoftmodPage(QWidget):
             self.known.setText(f"PSPM INFO, {when}: {' · '.join(facts)}".upper())
         else:
             self.known.setText("NO PSPM INFO REPORT (IT NEEDS CUSTOM FIRMWARE) · CONFIRM BELOW")
+        found = softmod.installed(dev) if dev else None
+        if found:
+            self.known.setText(f"{found} IS ALREADY ON THE MEMORY STICK · {self.known.text()}".upper())
+        self.mode.setCurrentIndex(1 if found else 0)
+        self._mode()
         self.status.setText("READY" if dev else "[NO PSP CONNECTED]")
 
     def _run(self, fn, then, msg):
@@ -76,7 +91,8 @@ class SoftmodPage(QWidget):
         if not all(b.isChecked() for b in (self.fw, self.battery, self.risk) if not b.isHidden()):
             self.status.setText("[TICK EVERY BOX ABOVE FIRST]")
             return
-        dev, ark, cipl = self.dev, self.ark.currentData(), self.cipl.isChecked()
+        update = self.mode.currentData() == "update"
+        dev, ark, cipl = self.dev, "update" if update else self.ark.currentData(), self.cipl.isChecked() and not update
         if cipl and QMessageBox.warning(
             self, "Permanent install", CIPL_WARNING.format(min=self.cfg["softmod"]["min_battery"]),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
@@ -100,6 +116,7 @@ class SoftmodPage(QWidget):
                    if old else "")
                 + "\n\nNothing is written to the PSP's flash now. Afterwards, on the PSP: leave USB mode, keep the "
                   f"charger in, and run {a['run']} from the Game menu."
+                + (" It updates the ARK already there and keeps your settings and plugins." if ark == "update" else "")
                 + (f" Only once ARK works, run {a['cipl_run']} to make it permanent." if cipl else ""))
         if QMessageBox.question(self, "Copy ARK", text) != QMessageBox.Yes:
             self.status.setText("CANCELLED")

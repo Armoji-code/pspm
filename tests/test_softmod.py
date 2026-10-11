@@ -1,3 +1,5 @@
+import struct
+
 import pytest
 
 from pspm import config, device, softmod
@@ -49,3 +51,21 @@ def test_missing_folder_in_download_is_an_error(tmp_path):
     cfg, _, home = _setup(tmp_path)
     with pytest.raises(FileNotFoundError):
         softmod.files(cfg, "ark5", home)
+
+
+def _sfo(title: bytes) -> bytes:
+    keys, data = 20 + 16, 20 + 16 + 8
+    return (b"\0PSF" + struct.pack("<IIII", 0x101, keys, data, 1) + struct.pack("<HHIII", 0, 0x204, len(title) + 1, 32, 0)
+            + b"TITLE\0\0\0" + title.ljust(32, b"\0"))
+
+
+def test_installed_reads_ark_from_its_save(tmp_path):
+    cfg, dev, _ = _setup(tmp_path)
+    assert softmod.installed(dev) is None
+    sfo = dev.root / "PSP/SAVEDATA/ARK_01234/PARAM.SFO"
+    sfo.parent.mkdir(parents=True)
+    sfo.write_bytes(_sfo(b"ARK-4"))
+    assert softmod.installed(dev) == "ARK-4"
+    sfo.write_bytes(b"junk")
+    assert softmod.installed(dev) == "ARK"
+    assert softmod.folders(cfg, "update") == {"PSP/GAME/UPDATE": "PSP/GAME/UPDATE"}
