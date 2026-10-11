@@ -43,6 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make -C psp/pspm_info
+      # The app ships prebuilt in src/pspm/psp_app so source installs have it; flag a stale copy.
+      - run: cmp psp/pspm_info/EBOOT.PBP src/pspm/psp_app/EBOOT.PBP || echo "::warning::src/pspm/psp_app/EBOOT.PBP differs from a fresh build; copy it over if main.c changed"
       - uses: actions/upload-artifact@v4
         with:
           name: pspm-info-eboot
@@ -62,10 +64,6 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: pyproject.toml
-      - uses: actions/download-artifact@v4
-        with:
-          name: pspm-info-eboot
-          path: src/pspm/psp_app  # bundled so INSTALL INFO APP can copy it to the PSP
       - run: pip install ".[dev]"
       - run: pyinstaller --noconfirm --windowed --name pspm --collect-data pspm --collect-submodules pspm src/pspm/__main__.py
       - uses: actions/upload-artifact@v4

@@ -27,3 +27,11 @@ def test_reads_info_written_by_psp_app(tmp_path):
     p.write_text("model=04g\nfirmware=6.61\nbattery=87%\n")
     info = diag.read_info(dev, cfg)
     assert info["model"] == "PSP-3000 (04g)" and info["firmware"] == "6.61" and info["battery"] == "87%"
+
+
+def test_installs_bundled_psp_app(tmp_path):
+    from pspm import config
+
+    cfg = config.load(tmp_path / "x")
+    dest = diag.install_app(device.Device(tmp_path, cfg["device"]["folders"]), cfg)
+    assert (dest / "EBOOT.PBP").read_bytes()[:4] == b"\0PBP"
