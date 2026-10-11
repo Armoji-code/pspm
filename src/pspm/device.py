@@ -5,6 +5,8 @@ from pathlib import Path
 
 import psutil
 
+from pspm import platform
+
 
 @dataclass(frozen=True)
 class Device:
@@ -20,6 +22,7 @@ class Device:
 
 def find(cfg: dict) -> list[Device]:
     dev = cfg["device"]
+    platform.current().mount_psps()
     roots = []
     for part in psutil.disk_partitions(all=False):
         try:

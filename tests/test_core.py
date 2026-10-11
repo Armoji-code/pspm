@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from pspm import config, device, files
@@ -23,6 +25,7 @@ def test_find_detects_marker(tmp_path, monkeypatch):
     (tmp_path / "usb").mkdir()
     parts = [type("P", (), {"mountpoint": str(tmp_path / n)}) for n in ("psp", "usb")]
     monkeypatch.setattr(device.psutil, "disk_partitions", lambda all: parts)
+    monkeypatch.setattr(device.platform, "current", lambda: type("OS", (), {"mount_psps": staticmethod(lambda: None)}))
     assert [d.root for d in device.find(config.load(tmp_path / "x"))] == [tmp_path / "psp"]
 
 
@@ -40,3 +43,24 @@ def test_copy_list_remove(dev, tmp_path):
 def test_remove_refuses_escape(dev):
     with pytest.raises(ValueError):
         files.remove(dev, "games", "../../etc")
+
+
+def test_mount_psps_mounts_once_per_plug(monkeypatch):
+    from pspm.platform import linux
+
+    disks = [{"path": "/dev/sda", "pkname": None, "model": '"PSP" Type A', "mountpoint": None, "fstype": None},
+             {"path": "/dev/sda1", "pkname": "sda", "model": None, "mountpoint": None, "fstype": "vfat"},
+             {"path": "/dev/sdb1", "pkname": "sdb", "model": None, "mountpoint": None, "fstype": "vfat"}]
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        return type("R", (), {"stdout": json.dumps({"blockdevices": disks})})()
+
+    monkeypatch.setattr(linux.subprocess, "run", run)
+    monkeypatch.setattr(linux.shutil, "which", lambda n: "/usr/bin/" + n)
+    monkeypatch.setattr(linux, "_tried", set())
+    linux.mount_psps()
+    linux.mount_psps()  # the user unmounted it again: leave it alone
+    assert [c for c in calls if c[0] == "udisksctl"] == [["udisksctl", "mount", "--no-user-interaction", "-b",
+                                                          "/dev/sda1"]]

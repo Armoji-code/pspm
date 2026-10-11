@@ -24,6 +24,10 @@ def autostart_remove() -> None:
             pass
 
 
+def mount_psps() -> None:
+    pass  # Windows gives every USB drive a letter by itself
+
+
 def fs_check(device: str) -> tuple[int, str]:
     # chkdsk needs admin: run it elevated (UAC prompt) and collect its output through a file.
     drive = device.rstrip("\\")  # "E:\\" -> "E:"
