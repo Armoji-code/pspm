@@ -1,7 +1,7 @@
 """ARK custom firmware: copies the official release's files to the memory stick. No UI.
 
 PSPM only writes to the memory stick. ARK itself is installed later on the PSP, when you run the copied app
-(FasterARK for ARK-5, ARK Loader for ARK-4). The permanent install (cIPL) is not copied.
+(FasterARK for ARK-5, ARK Loader for ARK-4). The permanent install (cIPL) is only copied when asked for.
 """
 import hashlib
 import shutil
@@ -22,10 +22,16 @@ def tool(cfg: dict, ark: str, root: Path = tools.ROOT) -> Path:
     return tools.fetch(a["url"], a["sha256"], root / f"{ark}-{a['version']}", cfg["softmod"]["timeout_seconds"])
 
 
-def files(cfg: dict, ark: str, home: Path) -> list[tuple[Path, str]]:
+def folders(cfg: dict, ark: str, cipl: bool = False) -> dict:
+    """Folder in the download -> folder on the stick. cipl adds the permanent installer, which writes the PSP's flash."""
+    a = cfg["softmod"][ark]
+    return a["copy"] | (a["cipl"] if cipl else {})
+
+
+def files(cfg: dict, ark: str, home: Path, cipl: bool = False) -> list[tuple[Path, str]]:
     """(file in the download, path on the stick) for everything that gets copied."""
     out = []
-    for src, dest in cfg["softmod"][ark]["copy"].items():
+    for src, dest in folders(cfg, ark, cipl).items():
         found = sorted(p for p in (home / src).rglob("*") if p.is_file())
         if not found:
             raise FileNotFoundError(f"{src} is missing from the download")
@@ -39,24 +45,29 @@ def problems(dev: Device, cfg: dict, todo: list[tuple[Path, str]], info: dict) -
     fw = info.get("firmware")
     if fw and fw not in s["firmware"]:
         out.append(f"firmware {fw} isn't supported; update the PSP to {' or '.join(s['firmware'])} first")
+    battery = info.get("battery", "")
+    # shortcut: the report is from when PSPM Info last ran, so this only catches a known-low battery
+    if battery.endswith("%") and int(battery[:-1]) < s["min_battery"] and info.get("charger") != "connected":
+        out.append(f"battery was at {battery} without the charger; charge to {s['min_battery']}% and run PSPM Info again")
     need = sum(src.stat().st_size for src, _ in todo)
     if dev.usage().free < need:
         out.append(f"needs {need // 2**20 + 1} MB free on the memory stick")
     return out
 
 
-def existing(dev: Device, cfg: dict, ark: str) -> list[str]:
+def existing(dev: Device, cfg: dict, ark: str, cipl: bool = False) -> list[str]:
     """Folders on the stick that the copy would replace."""
-    return [rel for rel in cfg["softmod"][ark]["copy"].values() if (dev.root / rel).exists()]
+    return [rel for rel in folders(cfg, ark, cipl).values() if (dev.root / rel).exists()]
 
 
 def _sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def install(dev: Device, cfg: dict, ark: str, todo: list[tuple[Path, str]], backups: Path = BACKUPS) -> Path | None:
+def install(dev: Device, cfg: dict, ark: str, todo: list[tuple[Path, str]], backups: Path = BACKUPS,
+            cipl: bool = False) -> Path | None:
     """Move folders being replaced to a backup, copy, then read every copy back. Returns the backup folder, if any."""
-    old = existing(dev, cfg, ark)
+    old = existing(dev, cfg, ark, cipl)
     keep = backups / time.strftime("%Y%m%d-%H%M%S") if old else None
     for rel in old:  # whole folders, so a different ARK version's leftovers never mix with the new files
         (keep / rel).parent.mkdir(parents=True, exist_ok=True)
