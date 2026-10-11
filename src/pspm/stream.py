@@ -6,7 +6,7 @@ and a stream at once, so the plugin is installed in USB mode and streams after t
 import subprocess
 from pathlib import Path
 
-from . import platform, tools
+from . import deps, platform, tools
 from .device import Device
 
 
@@ -48,6 +48,8 @@ def remove(dev: Device, cfg: dict) -> None:
 
 def start(cfg: dict, home: Path | None = None) -> subprocess.Popen:
     """Open the viewer window. Raises with what's missing on this PC (driver, wine...) instead of failing silently."""
+    if gone := deps.missing(cfg, "stream"):
+        raise OSError(f"install {', '.join(t['name'] for t in gone)} first, on the SETUP page")
     home = home or tool(cfg)
     platform.current().stream_ready(home / cfg["stream"]["tool"]["udev_rule"])
     cmd = [a.format(dir=home) for a in cfg["stream"]["run"][platform.name()]]

@@ -16,6 +16,14 @@ pspm config           # where your config.toml override lives
 
 Fonts (optional, the UI falls back without them): install Space Grotesk, Space Mono and Doto from Google Fonts.
 
+## Setup (programs the PC needs)
+
+Some features need programs on the PC: Wine and libusb 0.1 for streaming on Linux, the libusb-win32 driver for streaming on Windows, the .NET 8 runtime (Windows) or ICU (Linux) for the PS1 converter, dosfstools and pkexec for the filesystem check, udisks2 for mounting the PSP. The SETUP page shows which are missing; INSTALL MISSING shows the command, then runs it with your package manager (pacman, apt, dnf, zypper or winget), which asks for your password or UAC. On Arch, Wine needs the `[multilib]` repo. The Windows USB driver isn't in winget: PSPM opens Zadig's page, and you install it there with the plugin running (*PSP Type B*, libusb-win32).
+
+The list is `[deps]` in `defaults.toml`: add a program, a package name or a package manager there. Downloads PSPM fetches itself (PSXPackager, RemoteJoyLite, ARK) need nothing from you.
+
+![Setup](docs/setup.png)
+
 ## PPSSPP saves
 
 Each time the PSP is plugged in, PSPM syncs `PSP/SAVEDATA` with PPSSPP's both ways, so you can carry on where you left off on either.
@@ -78,8 +86,8 @@ Shows the PSP's screen in a window on the PC, live over the USB cable; your keyb
 2. Leave USB mode and restart the PSP, keeping the cable in. The PSP's USB can't be a drive and a stream at the same time.
 3. Press START VIEWER.
 
-- **Windows**, first time: with the plugin running, open [Zadig](https://zadig.akeo.ie), pick *PSP Type B* and install the libusb-win32 driver. PSPM tells you if it's missing.
-- **Linux**: install Wine and libusb 0.1 (`libusb-0.1-4` on Debian/Ubuntu). The first start asks for your password once to add a udev rule so the viewer can open the PSP's USB.
+- First time: the SETUP page installs what the viewer needs (Wine and libusb 0.1 on Linux, the libusb-win32 driver through [Zadig](https://zadig.akeo.ie) on Windows). START VIEWER tells you if any is missing.
+- **Linux**: the first start asks for your password once to add a udev rule so the viewer can open the PSP's USB.
 - On 2000/3000/Go/Street models, RemoteJoyLite's author recommends turning off the CFW's extended memory, ISO cache and memory stick speedup.
 - REMOVE PLUGIN takes it out of every list again.
 

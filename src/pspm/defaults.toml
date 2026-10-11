@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files", "diag", "tagger", "saves", "backup", "ps1", "stream", "softmod", "themes"]
+features = ["files", "diag", "tagger", "saves", "backup", "ps1", "stream", "softmod", "themes", "setup"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -172,6 +172,62 @@ cipl_run = "ARK_CIPL"
 # A CTF opened as a template keeps its own mark, since its flash0 files only fit the firmware it was made for.
 [theme_maker]
 ctf_magic = 0xDEAD0661
+
+# PC programs features need, installed from the SETUP page with this PC's package manager (it asks for your password
+# or UAC). check per OS: cmd:<program on PATH> | lib:<shared library> | path:<file, glob and %VARS% allowed>.
+# packages: per package manager; a tool with none for yours links to url instead. Downloads PSPM fetches itself
+# (PSXPackager, RemoteJoyLite, ARK) aren't listed: they need nothing from you.
+[deps.managers]             # first one found on PATH is used; {pkg} = install one package per call
+pacman = ["pkexec", "pacman", "-S", "--needed", "--noconfirm"]
+apt = ["pkexec", "apt-get", "install", "-y"]
+dnf = ["pkexec", "dnf", "install", "-y"]
+zypper = ["pkexec", "zypper", "--non-interactive", "install"]
+winget = ["winget", "install", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements",
+          "--id", "{pkg}"]
+
+[deps.tools.wine]
+name = "Wine"
+features = ["stream"]       # runs the Windows streaming viewer
+check = { linux = "cmd:wine" }
+packages = { pacman = ["wine"], apt = ["wine"], dnf = ["wine"], zypper = ["wine"] }  # Arch: needs [multilib]
+
+[deps.tools.libusb]
+name = "libusb 0.1"
+features = ["stream"]
+check = { linux = "lib:usb-0.1", windows = "path:%SystemRoot%/System32/drivers/libusb0.sys" }
+packages = { pacman = ["libusb-compat"], apt = ["libusb-0.1-4"], dnf = ["libusb-compat-0.1"], zypper = ["libusb-0_1-4"] }
+url = "https://zadig.akeo.ie"
+note = "Windows: with the streaming plugin running on the PSP, open Zadig, pick PSP Type B, install libusb-win32"
+
+[deps.tools.dotnet]
+name = ".NET 8 runtime"
+features = ["ps1"]
+check = { windows = "path:%ProgramFiles%/dotnet/shared/Microsoft.NETCore.App/8.*" }
+packages = { winget = ["Microsoft.DotNet.Runtime.8"] }
+
+[deps.tools.icu]
+name = "ICU"
+features = ["ps1"]          # PSXPackager's Linux build won't start without it
+check = { linux = "lib:icuuc" }
+packages = { pacman = ["icu"], apt = ["libicu-dev"], dnf = ["libicu"] }
+
+[deps.tools.dosfstools]
+name = "dosfstools"
+features = ["diag"]         # fsck.vfat, for CHECK FILESYSTEM
+check = { linux = "path:/usr/*bin/fsck.vfat" }  # often in sbin, which isn't on a user's PATH
+packages = { pacman = ["dosfstools"], apt = ["dosfstools"], dnf = ["dosfstools"], zypper = ["dosfstools"] }
+
+[deps.tools.polkit]
+name = "pkexec"
+features = ["diag", "stream"]  # the password prompt for the filesystem check and the streaming USB rule
+check = { linux = "cmd:pkexec" }
+packages = { pacman = ["polkit"], apt = ["pkexec"], dnf = ["polkit"], zypper = ["polkit"] }
+
+[deps.tools.udisks]
+name = "udisks2"
+features = ["files"]        # mounts the PSP when the desktop doesn't
+check = { linux = "cmd:udisksctl" }
+packages = { pacman = ["udisks2"], apt = ["udisks2"], dnf = ["udisks2"], zypper = ["udisks2"] }
 
 [themes.dark]
 bg = "#000000"
