@@ -70,8 +70,8 @@ login_timeout_seconds = 300
 # PSPM's own Google OAuth client (type "Desktop app", scope drive.file), so signing in is one button. Google treats a
 # desktop app's secret as not confidential. To use your own client instead, set both in your config.toml.
 [backup.gdrive]
-client_id = ""
-client_secret = ""
+client_id = "384504129472-1mlrqm589srl7ch32leg2e8r3139vpu5.apps.googleusercontent.com"
+client_secret = ""      # set in your config.toml; GitHub refuses Google secrets in a public repo
 auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
 token_url = "https://oauth2.googleapis.com/token"
 api_url = "https://www.googleapis.com/drive/v3"
