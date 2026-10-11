@@ -5,11 +5,16 @@ import sys
 _NAMES = {"win32": "windows", "linux": "linux"}
 
 
-def current():
-    name = _NAMES.get(sys.platform)
-    if name is None:
+def name() -> str:
+    """OS key used for per-OS config values and module names."""
+    n = _NAMES.get(sys.platform)
+    if n is None:
         raise NotImplementedError(f"PSPM has no platform layer for {sys.platform} yet")
-    return importlib.import_module(f"{__name__}.{name}")
+    return n
+
+
+def current():
+    return importlib.import_module(f"{__name__}.{name()}")
 
 
 def launch_command(*args: str) -> list[str]:

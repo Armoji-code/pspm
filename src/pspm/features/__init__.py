@@ -10,7 +10,11 @@ Built-ins are listed below; other packages add features via the
 from importlib import import_module
 from importlib.metadata import entry_points
 
-BUILTIN = {"files": "pspm.features.files:FEATURE", "tagger": "pspm.features.tagger:FEATURE"}
+BUILTIN = {
+    "files": "pspm.features.files:FEATURE",
+    "tagger": "pspm.features.tagger:FEATURE",
+    "saves": "pspm.features.saves:FEATURE",
+}
 
 
 def _load(ref: str):
