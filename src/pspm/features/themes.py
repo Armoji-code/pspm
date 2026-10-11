@@ -28,7 +28,7 @@ class ThemesPage(QWidget):
         self.wall.setFixedSize(240, 136)
         self.items = QListWidget(viewMode=QListWidget.IconMode, iconSize=QSize(48, 48),
                                  gridSize=QSize(110, 84), resizeMode=QListWidget.Adjust)
-        self.items.itemDoubleClicked.connect(lambda _: self.pick_image())
+        self.items.itemDoubleClicked.connect(self.pick_image)  # a lambda on self here kept the page alive past Qt
         self.name = QLineEdit(placeholderText="THEME NAME")
         self.mode = QSpinBox(minimum=0, maximum=12, prefix="COLOUR ")
         self.status = QLabel()
@@ -98,7 +98,7 @@ class ThemesPage(QWidget):
         if src:
             self._try(lambda: self.load(theme.unpack(Path(src), self._free(Path(src).stem))))
 
-    def pick_image(self):
+    def pick_image(self, *_):
         item = self.items.currentItem()
         if not (self.folder and item):
             return
