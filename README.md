@@ -62,7 +62,7 @@ Other clouds can be added by another package: subclass `pspm.backup.Provider` an
 - **Space**: used, free and total on the memory stick.
 - **Check filesystem**: a read-only check (`fsck.vfat -n` on Linux, `chkdsk` on Windows). Both need admin rights, so you get a password or UAC prompt. Nothing is repaired.
 - **Test capacity**: finds fake memory sticks. PSPM fills the free space with test data; you unplug and replug the PSP, then press VERIFY CAPACITY to read it back, and the test data is deleted. It takes a while on a big stick. On a fake card, writing past its real size can damage files already on it, so back up first.
-- **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM Info* from the PSP's Game menu (needs custom firmware), and the next time you plug in PSPM shows them. The app's source is in `psp/pspm_info` and CI builds it with the PSPDEV toolchain.
+- **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM Info* from the PSP's Game menu (needs custom firmware), and the next time you plug in PSPM shows them. The app ships prebuilt in `src/pspm/psp_app/`; its source is in `psp/pspm_info` (rebuild with the PSPDEV toolchain: `make -C psp/pspm_info`, then copy `EBOOT.PBP` over).
 
 ## PS1 converter
 

@@ -5,7 +5,6 @@ dist/
 .venv/
 .pytest_cache/
 .ruff_cache/
-src/pspm/psp_app/
 psp/pspm_info/*.o
 psp/pspm_info/*.elf
 psp/pspm_info/*.prx
