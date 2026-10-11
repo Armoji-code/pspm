@@ -1,4 +1,4 @@
-/* PSPM Info: writes model, firmware and battery to PSP/COMMON/pspm_info.txt for PSPM to read over USB. */
+/* PSPM Info: writes firmware and battery to PSP/COMMON/pspm_info.txt for PSPM to read over USB. */
 #include <pspkernel.h>
 #include <pspdebug.h>
 #include <psppower.h>
@@ -9,7 +9,6 @@ PSP_MODULE_INFO("PSPM_INFO", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
 
 int sceKernelDevkitVersion(void);
-int sceKernelGetModel(void);
 
 int main(int argc, char *argv[]) {
     /* PSP Go keeps apps on ef0:, so write to the device we were started from. */
@@ -28,7 +27,6 @@ int main(int argc, char *argv[]) {
         pspDebugScreenPrintf("Could not write %s\n", path);
     } else {
         unsigned fw = sceKernelDevkitVersion(); /* 0x06060110 = 6.61 */
-        fprintf(f, "model=%02dg\n", sceKernelGetModel() + 1);
         fprintf(f, "firmware=%u.%u%u\n", fw >> 24, (fw >> 16) & 0xff, (fw >> 8) & 0xff);
         if (scePowerIsBatteryExist()) {
             fprintf(f, "battery=%d%%\n", scePowerGetBatteryLifePercent());
