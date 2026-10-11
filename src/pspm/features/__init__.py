@@ -19,6 +19,7 @@ BUILTIN = {
     "ps1": "pspm.features.ps1:FEATURE",
     "stream": "pspm.features.stream:FEATURE",
     "softmod": "pspm.features.softmod:FEATURE",
+    "themes": "pspm.features.themes:FEATURE",
 }
 
 

@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3, PSP to PC streaming and the ARK softmod from phase 4. See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3, PSP to PC streaming and the ARK softmod from phase 4, and the theme editor from phase 5. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -99,6 +99,22 @@ Copies the official ARK files to the memory stick so you can install ARK on the 
 
 ARK then runs until a full power-off, after which you run the same app again. To make it permanent, tick the cIPL box before copying: PSPM warns you again, then also copies ARK's cIPL installer (`CustomIPL` for ARK-5, `ARK_cIPL` for ARK-4). Run it on the PSP only once ARK works, with the charger in. It writes the PSP's flash, and a power cut while it runs can brick the console. If the PSPM Info app last saw the battery below 75% without the charger, PSPM refuses to copy.
 Both releases are downloaded on first use from GitHub and checked against the sha256 in `defaults.toml`. FasterARK reuses one `latest` tag, so its next release will be refused until the url and sha256 there are updated.
+
+## Themes
+
+Makes PSP themes from scratch or from an existing one.
+
+- **NEW** starts a blank theme: a dark wallpaper and a white dot for every icon.
+- **OPEN THEME** takes a `.ptf` or `.ctf` apart so you can use it as a template.
+- Double-click any slot (or select it and press **IMAGE**) to use a picture of your own; it's cropped to the slot's size. The tooltip shows the size. Set the name and the background colour on the left.
+- **FOLDER** opens the theme's folder: every image is a PNG you can also edit in any paint program.
+- **BUILD** writes the theme and, with the PSP plugged in, copies it to `PSP/THEME`. On the PSP pick it in Settings > Theme Settings.
+
+Two formats:
+- **PTF** is Sony's own: wallpaper, preview, background colour and the XMB icons. It works on any PSP on firmware 6.20 or later, no custom firmware needed. Fonts and sounds can't be in a PTF.
+- **CTF** is for custom firmware with the [CXMB](https://github.com/PSP-Archive/CXMB) plugin, which you install yourself. On top of a PTF's preview it carries flash0 files (`.rco` and others) that change the whole XMB. Put them in the theme folder's `flash0/` (e.g. `flash0/vsh/resource/topmenu_plugin.rco`) and BUILD makes a `.ctf` too. PSPM doesn't edit RCO files; use [rcomage](https://github.com/kakaroto/rcomage) or take them from an existing CTF. A CTF only loads on the firmware it was made for: a new one is marked for 6.61 (`ctf_magic` under `[theme_maker]`), a template keeps its own mark.
+
+Not tested on a real PSP yet: the files match existing themes byte for byte, but no PSP has loaded one PSPM built.
 
 ## Change things without touching code
 
