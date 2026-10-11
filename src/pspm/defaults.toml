@@ -163,6 +163,17 @@ cipl_run = "CUSTOMIPL"
 [softmod.ark5.cipl]          # permanent install, opt-in
 "PSP/GAME/CustomIPL" = "PSP/GAME/CustomIPL"
 
+# ARK-5 updater from the same FasterARK release. Run on a PSP already running ARK-4 or ARK-5, it updates ARK in place and
+# keeps the settings and plugins in SEPLUGINS (it's the file ARK's own online updater downloads).
+[softmod.update]
+name = "ARK-5 update"
+version = "5.1.0"
+url = "https://github.com/PSP-Arkfive/FasterARK/releases/download/latest/ARK_UPDATE.zip"
+sha256 = "9ba03e96522cc2758b5f06e89a237de79ec5ac04eb3b37df258872ab1accfda4"
+run = "ARK UPDATE"
+[softmod.update.copy]
+"PSP/GAME/UPDATE" = "PSP/GAME/UPDATE"
+
 # ARK-4 final release (github.com/PSP-Archive/ARK-4, archived 2026-08-02). It can update itself to ARK-5 later.
 [softmod.ark4]
 name = "ARK-4"

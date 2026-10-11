@@ -38,7 +38,11 @@ def _head(f) -> tuple[list[int], list[bytes]]:
 def title(pbp: Path) -> str:
     """TITLE from the PBP's PARAM.SFO."""
     with open(pbp, "rb") as f:
-        sfo = _head(f)[1][0]
+        return sfo_title(_head(f)[1][0])
+
+
+def sfo_title(sfo: bytes) -> str:
+    """TITLE from a PARAM.SFO."""
     keys, data, n = struct.unpack_from("<III", sfo, 8)
     for i in range(n):
         k, _, size, _, at = struct.unpack_from("<HHIII", sfo, 20 + 16 * i)
