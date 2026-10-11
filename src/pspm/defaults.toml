@@ -8,7 +8,7 @@ open_on_connect = true    # `pspm watch` opens the app when a PSP appears
 
 # Features shown in the sidebar, in order. Third-party features register
 # under the "pspm.features" entry point and are enabled by adding their id here.
-features = ["files", "tagger", "saves"]
+features = ["files", "tagger", "saves", "backup"]
 
 [device]
 # A mounted drive counts as a PSP when this folder exists at its root.
@@ -45,6 +45,32 @@ auto_sync = true          # sync on plug-in when nothing conflicts; conflicts al
 [saves.ppsspp_paths]
 windows = ["{documents}/PPSSPP/PSP"]
 linux = ["~/.config/ppsspp/PSP", "~/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP"]
+
+# Cloud backup. Mirrors the folders below to the cloud on plug-in, uploading only changed files.
+# Nothing is deleted in the cloud. Sign-in happens in your browser; the token is kept in the OS keyring.
+[backup]
+provider = "dropbox"      # gdrive | dropbox | any provider registered under the "pspm.cloud" entry point
+auto = true               # back up on plug-in once signed in
+folders = ["saves"]       # labels from [device.folders], e.g. ["saves", "music", "photos"]
+remote_folder = "PSPM"    # top folder in the cloud; the stick's layout is kept under it
+redirect_port = 53682     # browser sign-in returns to http://127.0.0.1:<port>/ (register this in your app)
+login_timeout_seconds = 300
+
+# Each provider needs an app registration of your own (see README); put its id in your config.toml.
+[backup.dropbox]
+client_id = ""            # the Dropbox app key (PKCE, no secret needed)
+auth_url = "https://www.dropbox.com/oauth2/authorize"
+token_url = "https://api.dropboxapi.com/oauth2/token"
+content_url = "https://content.dropboxapi.com/2"
+chunk_mb = 64             # files bigger than this upload in parts (Dropbox caps one request at 150 MB)
+
+[backup.gdrive]
+client_id = ""            # OAuth client of type "Desktop app"
+client_secret = ""        # Google issues one even for desktop apps; keep it in your config.toml, not in the repo
+auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
+token_url = "https://oauth2.googleapis.com/token"
+api_url = "https://www.googleapis.com/drive/v3"
+upload_url = "https://www.googleapis.com/upload/drive/v3"
 
 [themes.dark]
 bg = "#000000"

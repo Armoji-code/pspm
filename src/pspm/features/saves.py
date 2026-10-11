@@ -31,8 +31,8 @@ class _Job(QThread):
     def run(self):
         try:
             self.done.emit(self.fn())
-        except OSError as e:
-            self.failed.emit(str(e))
+        except Exception as e:  # noqa: BLE001 - network, keyring, disk: shown in the status line instead of killing the thread
+            self.failed.emit(str(e) or type(e).__name__)
 
 
 def _when(t):
