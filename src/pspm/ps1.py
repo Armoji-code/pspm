@@ -1,47 +1,29 @@
 """PS1 disc images to PSP EBOOT.PBP, using PSXPackager (MIT, downloaded on first use). No UI."""
-import hashlib
 import io
 import shutil
 import struct
 import subprocess
-import tarfile
 import tempfile
-import urllib.request
-import zipfile
 from itertools import pairwise
 from pathlib import Path
 
 from PIL import Image
-from platformdirs import user_data_path
 
-from . import platform
+from . import platform, tools
 
-TOOLS = user_data_path("pspm") / "tools"
 IMAGES = ["*.cue", "*.bin", "*.img", "*.iso", "*.chd", "*.m3u", "*.zip", "*.7z"]
 ICON = (144, 80)  # ICON0.PNG size the XMB shows
 ALIGN = 0x10000
 
 
-def tool(cfg: dict, root: Path = TOOLS) -> Path:
+def tool(cfg: dict, root: Path = tools.ROOT) -> Path:
     """Path to PSXPackager for this OS, downloaded and checked against its sha256 the first time."""
     t = cfg["ps1"]["tool"][platform.name()]
     home = root / f"psxpackager-{cfg['ps1']['version']}"
     exe = home / t["exe"]
-    if exe.is_file():
-        return exe
-    with urllib.request.urlopen(t["url"], timeout=cfg["ps1"]["timeout_seconds"]) as r:
-        data = r.read()
-    if hashlib.sha256(data).hexdigest() != t["sha256"]:
-        raise OSError("PSXPackager download doesn't match its checksum; not using it")
-    root.mkdir(parents=True, exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(dir=root))
-    if t["url"].endswith(".zip"):
-        zipfile.ZipFile(io.BytesIO(data)).extractall(tmp)
-    else:
-        with tarfile.open(fileobj=io.BytesIO(data)) as tar:
-            tar.extractall(tmp, filter="data")
-    tmp.rename(home)  # only a complete unpack ends up at `home`
-    exe.chmod(0o755)
+    if not exe.is_file():
+        tools.fetch(t["url"], t["sha256"], home, cfg["ps1"]["timeout_seconds"])
+        exe.chmod(0o755)
     return exe
 
 

@@ -12,7 +12,7 @@ def test_window_builds_without_psp(tmp_path, monkeypatch):
     monkeypatch.setattr(app.device, "find", lambda cfg: [])
     QApplication.instance() or QApplication([])
     w = app.Main(config.load(tmp_path / "x"))
-    assert w.hero.text() == "NO PSP" and w.nav.count() == 6
+    assert w.hero.text() == "NO PSP" and w.nav.count() == 7
 
 
 def test_tagger_page_edit_save_sort(tmp_path):
@@ -117,3 +117,22 @@ def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
     app.processEvents()
     assert got == {"discs": [Path("d1.cue"), Path("d2.cue")], "games": tmp_path / "PSP" / "GAME"}
     assert p.status.text() == "INSTALLED METAL GEAR SOLID TO PSP/GAME/SLUS00594" and not p.discs.count()
+
+
+def test_stream_page_installs_plugin(tmp_path, monkeypatch):
+    from pspm import device, stream
+    from pspm.features.stream import StreamPage
+
+    (tmp_path / "rjl" / "psp").mkdir(parents=True)
+    (tmp_path / "rjl" / "psp" / "RemoteJoyLite.prx").write_bytes(b"prx")
+    monkeypatch.setattr(stream, "tool", lambda cfg: tmp_path / "rjl")
+    cfg = config.load(tmp_path / "x")
+    app = QApplication.instance() or QApplication([])
+    p = StreamPage(cfg)
+    p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
+    assert p.status.text() == "PLUGIN NOT INSTALLED"
+    p.install()
+    p.job.wait()
+    app.processEvents()
+    assert (tmp_path / "psp" / "SEPLUGINS" / "RemoteJoyLite.prx").read_bytes() == b"prx"
+    assert p.status.text().startswith("PLUGIN INSTALLED")

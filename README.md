@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3. See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3, and PSP to PC streaming from phase 4. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -69,6 +69,21 @@ Other clouds can be added by another package: subclass `pspm.backup.Provider` an
 Turns a PS1 game into an `EBOOT.PBP` in `PSP/GAME/<game ID>/`, for the PSP's built-in PS1 emulator (needs custom firmware). Press ADD DISCS and pick one game's images: `.cue` (with its `.bin`), `.img`, `.iso`, `.chd`, `.m3u` or a `.zip`/`.7z`. Several discs become one multi-disc EBOOT, in file name order. The title comes from the disc's game ID; ICON sets an optional icon from any picture.
 
 The conversion is done by [PSXPackager](https://github.com/RupertAvery/PSXPackager) (MIT), downloaded on first use from its GitHub release and checked against the sha256 in `defaults.toml`. On Windows it needs the .NET 8 runtime. PSPM ships no Sony files, BIOS or games.
+
+## Streaming
+
+Shows the PSP's screen in a window on the PC, live over the USB cable; your keyboard or gamepad controls the PSP. Needs custom firmware.
+
+1. With the PSP in USB mode, open STREAMING and press INSTALL PLUGIN. It copies `RemoteJoyLite.prx` to `SEPLUGINS/` and turns it on for ARK (`PLUGINS.TXT`) and PRO/ME (`vsh.txt`, `game.txt`, `pops.txt`).
+2. Leave USB mode and restart the PSP, keeping the cable in. The PSP's USB can't be a drive and a stream at the same time.
+3. Press START VIEWER.
+
+- **Windows**, first time: with the plugin running, open [Zadig](https://zadig.akeo.ie), pick *PSP Type B* and install the libusb-win32 driver. PSPM tells you if it's missing.
+- **Linux**: install Wine and libusb 0.1 (`libusb-0.1-4` on Debian/Ubuntu). The first start asks for your password once to add a udev rule so the viewer can open the PSP's USB.
+- On 2000/3000/Go/Street models, RemoteJoyLite's author recommends turning off the CFW's extended memory, ISO cache and memory stick speedup.
+- REMOVE PLUGIN takes it out of every list again.
+
+The plugin and viewer are [RemoteJoyLite](https://github.com/Kethen/RemoteJoyLite) (Kethen's fork), downloaded on first use from its GitHub release and checked against the sha256 in `defaults.toml`. Streaming the PC's screen to the PSP isn't offered: no maintained tool does it.
 
 ## Change things without touching code
 
