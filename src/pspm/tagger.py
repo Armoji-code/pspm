@@ -55,11 +55,20 @@ class Lookup:
         self._last = 0.0
 
     def _get(self, url: str) -> bytes:
-        time.sleep(max(0.0, self._last + self.cfg["request_gap_seconds"] - time.monotonic()))
-        self._last = time.monotonic()
-        req = urllib.request.Request(url, headers={"User-Agent": self.cfg["user_agent"]})
-        with urllib.request.urlopen(req, timeout=self.cfg["timeout_seconds"]) as r:
-            return r.read()
+        for attempt in range(self.cfg["retries"] + 1):
+            time.sleep(max(0.0, self._last + self.cfg["request_gap_seconds"] - time.monotonic()))
+            req = urllib.request.Request(url, headers={"User-Agent": self.cfg["user_agent"]})
+            try:
+                with urllib.request.urlopen(req, timeout=self.cfg["timeout_seconds"]) as r:
+                    return r.read()
+            except urllib.error.HTTPError as e:
+                # 503 = MusicBrainz rate limit or overload, 429 = archive.org (covers); both say "wait and retry".
+                if e.code not in (429, 503) or attempt == self.cfg["retries"]:
+                    raise
+                wait = e.headers.get("Retry-After", "")
+                time.sleep(min(float(wait) if wait.isdigit() else 2.0**attempt, 30))
+            finally:
+                self._last = time.monotonic()  # gap counts from the end of a request, not its start
 
     def find(self, t: Track) -> Track | None:
         """Best match for t with corrected artist/title/album/genre, or None below min_score."""
@@ -84,11 +93,20 @@ class Lookup:
         """Front cover as a PSP-safe JPEG (baseline, max cover_size px), or None if the release has none."""
         try:
             raw = self._get(f"{self.cfg['coverart_url']}/release/{release_id}/front-500")
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise
+        except urllib.error.HTTPError:
+            return None  # 404 = no cover; anything else (archive.org is often down): keep the tags, skip the cover
         return psp_jpeg(raw, self.cfg["cover_size"])
+
+
+def friendly(e: Exception) -> str:
+    """A lookup error in words the user can act on."""
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code in (429, 503):
+            return "MusicBrainz is busy right now. Wait a minute, then press FIND TAGS again."
+        return f"MusicBrainz answered with an error ({e.code}). Try again later."
+    if isinstance(e, (urllib.error.URLError, OSError)):
+        return "Can't reach MusicBrainz. Check your internet connection."
+    return f"MusicBrainz sent something unexpected: {e}"
 
 
 def _esc(s: str) -> str:
