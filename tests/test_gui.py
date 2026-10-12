@@ -401,3 +401,23 @@ def test_files_page_loads_thumbnails_in_background(tmp_path):
     p.thumbs.pool.waitForDone()
     app.processEvents()
     assert not it.icon(0).isNull() and it.text(1).endswith("KB")
+
+
+def test_stream_page_picks_and_shows_psp_controls(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    from pspm import controls
+    from pspm.features.stream import StreamPage
+
+    saved = {}
+    monkeypatch.setattr(controls, "save", lambda m: saved.update(m))
+    QApplication.instance() or QApplication([])
+    p = StreamPage(config.load(tmp_path / "x"))
+    assert p.findChild(QLabel, "target_cross").text() == "PAD A"
+    p.assign("cross", "space")
+    p.assign("stick", "stick:wasd")
+    assert p.findChild(QLabel, "target_cross").text() == "SPACE" and p.findChild(QLabel, "target_stick").text() == "WASD"
+    assert saved["buttons"]["cross"] == "space" and saved["stick"] == "wasd"
+    p.pad_state.emit(controls.BUTTONS["cross"], 0, 255)
+    QApplication.processEvents()
+    assert p.psp.pressed == controls.BUTTONS["cross"] and p.psp.stick == (0, 255)

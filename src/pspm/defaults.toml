@@ -150,6 +150,12 @@ exe = "psxpackager-linux-x64/psxpackager"
 [stream]
 plugin = "SEPLUGINS/RemoteJoyLite.prx"
 check_seconds = 5  # START VIEWER waits this long for the viewer to fail before calling it started
+# Linux: lets you, not just root, open the PSP's USB (both directions) and PSPM create the virtual gamepad for the
+# PSP's controls. Written to /etc/udev/rules.d once, with one password prompt.
+udev_rule = """
+SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="01c9", MODE="0660", TAG+="uaccess"
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", TAG+="uaccess", OPTIONS+="static_node=uinput"
+"""
 
 # Plugin list on the stick -> lines that load the plugin. PLUGINS.TXT is ARK's; the .txt files are PRO/ME's.
 # shortcut: paths say ms0:, so a PSP Go streams only with the plugin on its memory stick, not internal storage (ef0:).
@@ -165,7 +171,6 @@ version = "2026-01-06"
 url = "https://github.com/Kethen/RemoteJoyLite/releases/download/2026-01-06/RemoteJoyLite_a0bc706a.zip"
 sha256 = "93c6c739e05a5008e753f5b0982f78130bbc863bae9f3668349919ed8ba68768"
 prx = "psp/RemoteJoyLite.prx"
-udev_rule = "x64_linux/60-psp-b-usb.rules"  # Linux: lets you, not just root, open the PSP's USB
 timeout_seconds = 120
 
 # Viewer per OS; {dir} is the unpacked download. Use the _JA_ files for the Japanese viewer. On Linux it runs in Wine.
@@ -179,14 +184,34 @@ app = "PSPM_SCREEN"   # folder in the games folder, or in the CAT_ folder picked
 vendor = 0x054C
 product = 0x01C9      # PSPLink's "Type B", so RemoteJoyLite's Windows driver (Zadig) and the udev rule cover it
 bcd_device = 0x0200   # tells PSPM Screen apart from RemoteJoyLite (0x0100) on the same ID
-endpoint = 0x02
+endpoint = 0x02       # frames to the PSP
+pad_endpoint = 0x81   # the PSP's buttons and stick back to the PC
 timeout_ms = 2000
 max_fps = 30
-# Linux: lets you, not just root, open the PSP's USB (same file and line as RemoteJoyLite's)
-udev_rule = 'SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="01c9", MODE="0660", TAG+="uaccess"'
+quality = 80          # JPEG quality of each frame; the PSP decodes them in hardware
 # Wayland (wlroots: Sway, Hyprland...) capture; -s 0.5 halves the size, -o <output> picks one of several screens.
 # X11 and Windows use Pillow's ImageGrab.
 wayland_capture = ["grim", "-s", "0.5", "-t", "ppm", "-"]
+# PSP controls on the PC: each button to a key (a-z, 0-9, space, enter, esc, tab, backspace, shift, ctrl, alt, up,
+# down, left, right, f1-f12), a mouse button (mouse_left/right/middle), a gamepad button (pad_a/b/x/y/lb/rb/select/
+# start/up/down/left/right; Linux only for now) or "none". The stick: "pad", "mouse", "arrows", "wasd" or "none".
+# The Streaming page changes these and keeps your picks in psp_controls.json next to config.toml.
+stick = "pad"
+dead_zone = 24        # stick movement ignored around the middle, of 128
+mouse_speed = 12      # pixels per 1/60 s with the stick pushed all the way
+[cast.buttons]
+cross = "pad_a"
+circle = "pad_b"
+square = "pad_x"
+triangle = "pad_y"
+l = "pad_lb"
+r = "pad_rb"
+select = "pad_select"
+start = "pad_start"
+up = "pad_up"
+down = "pad_down"
+left = "pad_left"
+right = "pad_right"
 
 # Softmod: copies the official ARK custom firmware release to the memory stick, downloaded and checked by sha256.
 # PSPM never writes the PSP's flash. You install ARK on the PSP by running the copied app; until you also install a
