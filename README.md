@@ -2,7 +2,7 @@
 
 Manager and companion app for the Sony PSP. Plug in a PSP (USB mode) and PSPM opens and shows its memory stick.
 
-Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3, PSP to PC streaming and the ARK softmod from phase 4, and the theme editor from phase 5. See [docs/PLAN.md](docs/PLAN.md).
+Status: phase 1 (core, PSP detection, auto-open, file manager) and phase 2 (MP3 tagger, PPSSPP save sync, cloud backup), diagnostics and the PS1 converter from phase 3, PSP to PC streaming and the ARK softmod from phase 4, PC to PSP streaming, and the theme editor from phase 5. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -18,7 +18,7 @@ Fonts (optional, the UI falls back without them): install Space Grotesk, Space M
 
 ## Setup (programs the PC needs)
 
-Some features need programs on the PC: Wine and libusb 0.1 for streaming on Linux, the libusb-win32 driver for streaming on Windows, the .NET 8 runtime (Windows) or ICU (Linux) for the PS1 converter, dosfstools and pkexec for the filesystem check, udisks2 for mounting the PSP. The SETUP page shows which are missing; INSTALL MISSING shows the command, then runs it with your package manager (pacman, apt, dnf, zypper or winget), which asks for your password or UAC. On Arch, Wine needs the `[multilib]` repo. The Windows USB driver isn't in winget: PSPM opens Zadig's page, and you install it there with the plugin running (*PSP Type B*, libusb-win32).
+Some features need programs on the PC: Wine and libusb 0.1 for streaming on Linux (grim for PC to PSP on Wayland), the libusb-win32 driver for streaming on Windows, the .NET 8 runtime (Windows) or ICU (Linux) for the PS1 converter, dosfstools and pkexec for the filesystem check, udisks2 for mounting the PSP. The SETUP page shows which are missing; INSTALL MISSING shows the command, then runs it with your package manager (pacman, apt, dnf, zypper or winget), which asks for your password or UAC. On Arch, Wine needs the `[multilib]` repo. The Windows USB driver isn't in winget: PSPM opens Zadig's page, and you install it there with the plugin running (*PSP Type B*, libusb-win32).
 
 The list is `[deps]` in `defaults.toml`: add a program, a package name or a package manager there. Downloads PSPM fetches itself (PSXPackager, RemoteJoyLite, ARK) need nothing from you.
 
@@ -85,7 +85,20 @@ Shows the PSP's screen in a window on the PC, live over the USB cable; your keyb
 - On 2000/3000/Go/Street models, RemoteJoyLite's author recommends turning off the CFW's extended memory, ISO cache and memory stick speedup.
 - REMOVE PLUGIN takes it out of every list again.
 
-The plugin and viewer are [RemoteJoyLite](https://github.com/Kethen/RemoteJoyLite) (Kethen's fork), downloaded on first use from its GitHub release and checked against the sha256 in `defaults.toml`. Streaming the PC's screen to the PSP isn't offered: no maintained tool does it.
+The plugin and viewer are [RemoteJoyLite](https://github.com/Kethen/RemoteJoyLite) (Kethen's fork), downloaded on first use from its GitHub release and checked against the sha256 in `defaults.toml`.
+
+### PC to PSP
+
+Shows the PC's screen on the PSP, over the same cable, with PSPM's own PSP app, PSPM Screen.
+
+1. With the PSP in USB mode, press INSTALL PSP APP. It copies `EBOOT.PBP` and its USB driver `pspm_usb.prx` to `PSP/GAME/PSPM_SCREEN`.
+2. Leave USB mode, keep the cable in, and start PSPM Screen on the PSP.
+3. Press START SENDING. STOP SENDING or HOME on the PSP ends it.
+
+- Linux: Wayland needs `grim` (wlroots desktops such as Sway and Hyprland; GNOME and KDE Wayland aren't supported yet); X11 needs nothing. The first start asks for your password once for the same udev rule as the viewer.
+- Windows: uses the same libusb-win32 driver as the viewer (Zadig, *PSP Type B*).
+- RemoteJoyLite blocks other USB drivers while it's on for games: REMOVE PLUGIN and restart the PSP first.
+- Frames go uncompressed (480x272, 16-bit), up to `max_fps` in `[cast]`.
 
 ## Softmod (ARK custom firmware)
 

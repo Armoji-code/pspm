@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import shlex
@@ -70,3 +71,12 @@ def link_dir(target: Path, link: Path) -> None:
 
 def unlink_dir(link: Path) -> None:
     link.unlink()
+
+
+def capture(c: dict):
+    """The whole screen as a Pillow image: grim on Wayland (wlroots: Sway, Hyprland...), else X11."""
+    from PIL import Image, ImageGrab
+
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return Image.open(io.BytesIO(subprocess.run(c["wayland_capture"], capture_output=True, check=True).stdout))
+    return ImageGrab.grab()

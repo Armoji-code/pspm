@@ -51,3 +51,9 @@ def link_dir(target: Path, link: Path) -> None:
 
 def unlink_dir(link: Path) -> None:
     os.rmdir(link)  # removes the junction only, never the PSP folder behind it
+
+
+def capture(c: dict):
+    from PIL import ImageGrab
+
+    return ImageGrab.grab()
