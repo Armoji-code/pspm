@@ -112,10 +112,12 @@ def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
 
     got = {}
 
-    def fake(discs, games, cfg, icon):
-        got.update(discs=discs, games=games)
+    def fake(discs, games, cfg, meta):
+        got.update(discs=discs, games=games, meta=meta)
         return games / "SLUS00594"
 
+    png = (Path(__file__).parents[1] / "docs" / "screenshot.png").read_bytes()
+    monkeypatch.setattr(ps1, "lookup", lambda gid, cfg: {"title": f"Game {gid}", "pic1": png})
     monkeypatch.setattr(ps1, "convert", fake)
     monkeypatch.setattr(ps1, "title", lambda pbp: "Metal Gear Solid")
     cfg = config.load(tmp_path / "x")
@@ -123,10 +125,18 @@ def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
     p = Ps1Page(cfg)
     p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
     p.discs.addItems(["d1.cue", "d2.cue"])
+    p.game_id.setText("SLUS-00594")
+    p.find()
+    p.job.wait()
+    app.processEvents()
+    assert p.title.text() == "Game SLUS-00594" and p.meta["pic1"] == png and p.shown["pic1"].pixmap()
+    assert p.status.text() == "FOUND GAME SLUS-00594 · NONE ONLINE: ICON, INFO PICTURE"
+    p.title.setText("Metal Gear Solid")
     p.convert()
     p.job.wait()
     app.processEvents()
-    assert got == {"discs": [Path("d1.cue"), Path("d2.cue")], "games": tmp_path / "PSP" / "GAME"}
+    assert got == {"discs": [Path("d1.cue"), Path("d2.cue")], "games": tmp_path / "PSP" / "GAME",
+                   "meta": {"title": "Metal Gear Solid", "pic1": png}}
     assert p.status.text() == "INSTALLED METAL GEAR SOLID TO PSP/GAME/SLUS00594" and not p.discs.count()
 
 
