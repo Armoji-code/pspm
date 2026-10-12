@@ -1,5 +1,6 @@
 """PS1 disc images to PSP EBOOT.PBP, using PSXPackager (MIT, downloaded on first use). No UI."""
 import io
+import os
 import re
 import shutil
 import struct
@@ -132,27 +133,69 @@ def lookup(game_id: str, cfg: dict) -> dict:
     return meta
 
 
+def _header(f, meta: dict) -> tuple[bytes, int, int]:
+    """New PBP header up to DATA.PSAR, its DATA.PSAR offset and the old one. meta as in write()."""
+    f.seek(0)
+    magic = f.read(8)  # "\0PBP" + version
+    offs, parts = _head(f)
+    if meta.get("title"):
+        parts[0] = sfo_set_title(parts[0], meta["title"])
+    for res, (i, size) in RES.items():
+        if (data := meta.get(res)) is not None:
+            parts[i] = picture(data, size, res == "pic1") if data and size else data
+    parts[6] = parts[6].rstrip(b"\0")  # padding up to DATA.PSAR, written back below
+    new = [offs[0]]
+    for p in parts:
+        new.append(new[-1] + len(p))
+    psar = offs[7] if new[7] <= offs[7] else -(-new[7] // ALIGN) * ALIGN  # keep DATA.PSAR aligned as built
+    head = (magic + struct.pack("<8I", *new[:7], psar)).ljust(offs[0], b"\0") + b"".join(parts)
+    return head.ljust(psar, b"\0"), psar, offs[7]
+
+
 def write(pbp: Path, dest: Path, meta: dict | None = None) -> None:
     """Copy pbp to dest, setting what `meta` has: title (str), icon0/pic0/pic1 (any image bytes) and snd0 (AT3 bytes).
-    DATA.PSAR keeps its aligned offset."""
-    meta = meta or {}
+    b"" empties a resource, None or a missing key keeps it. DATA.PSAR keeps its aligned offset."""
     with open(pbp, "rb") as f, open(dest, "wb") as out:
-        magic = f.read(8)  # "\0PBP" + version
-        offs, parts = _head(f)
-        if meta.get("title"):
-            parts[0] = sfo_set_title(parts[0], meta["title"])
-        for res, (i, size) in RES.items():
-            if meta.get(res):
-                parts[i] = picture(meta[res], size, res == "pic1") if size else meta[res]
-        parts[6] = parts[6].rstrip(b"\0")  # padding up to DATA.PSAR, written back below
-        new = [offs[0]]
-        for p in parts:
-            new.append(new[-1] + len(p))
-        psar = offs[7] if new[7] <= offs[7] else -(-new[7] // ALIGN) * ALIGN  # keep DATA.PSAR aligned as built
-        out.write((magic + struct.pack("<8I", *new[:7], psar)).ljust(offs[0], b"\0"))
-        out.write(b"".join(parts).ljust(psar - offs[0], b"\0"))
-        f.seek(offs[7])
+        head, _, old = _header(f, meta or {})
+        out.write(head)
+        f.seek(old)
         shutil.copyfileobj(f, out, 1 << 20)
+
+
+def edit(pbp: Path, meta: dict) -> None:
+    """Change an installed PBP like write(). Only the header is rewritten when it still fits before DATA.PSAR;
+    otherwise the PBP is rebuilt next to it and swapped in, so the game is never left half written."""
+    with open(pbp, "r+b") as f:
+        head, psar, old = _header(f, meta)
+        if psar == old:
+            f.seek(0)
+            f.write(head)
+            return
+    tmp = pbp.with_name(pbp.name + ".pspm")
+    write(pbp, tmp, meta)
+    os.replace(tmp, pbp)
+
+
+def read(pbp: Path) -> dict:
+    """Title and the resources a PBP has, in write()'s form."""
+    with open(pbp, "rb") as f:
+        parts = _head(f)[1]
+    return {"title": sfo_title(parts[0])} | {res: parts[i] for res, (i, _) in RES.items() if parts[i]}
+
+
+def installed(games: Path) -> list[Path]:
+    """EBOOT.PBP of every converted PS1 game in the games folder and its CAT_ folders."""
+    found = []
+    for pbp in sorted([*games.glob("*/EBOOT.PBP"), *games.glob("CAT_*/*/EBOOT.PBP")]):
+        try:
+            with open(pbp, "rb") as f:
+                f.seek(36)  # DATA.PSAR offset, the last of the header's eight
+                f.seek(struct.unpack("<I", f.read(4))[0])
+                if f.read(10) in (b"PSISOIMG00", b"PSTITLEIMG"):  # one disc / multi-disc PS1 data
+                    found.append(pbp)
+        except (OSError, struct.error):
+            pass  # not a PBP, or unreadable: not ours to edit
+    return found
 
 
 def convert(images: list[Path], games: Path, cfg: dict, meta: dict | None = None, exe: Path | None = None) -> Path:

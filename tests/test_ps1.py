@@ -113,3 +113,19 @@ def test_tool_download_checks_sha256(tmp_path, monkeypatch):
     t["sha256"] = hashlib.sha256(buf.getvalue()).hexdigest()
     exe = ps1.tool(cfg, tmp_path)
     assert exe.read_text() == "#!/bin/sh\n" and ps1.tool(cfg, tmp_path) == exe
+
+
+def test_edit_installed_game_in_place_and_by_rebuild(tmp_path):
+    game = tmp_path / "GAME" / "CAT_PS1" / "SLUS00594"
+    game.mkdir(parents=True)
+    (game / "EBOOT.PBP").write_bytes(_pbp())
+    (tmp_path / "GAME" / "HOMEBREW").mkdir()
+    (tmp_path / "GAME" / "HOMEBREW" / "EBOOT.PBP").write_bytes(_pbp()[:0x10000] + b"not a PS1 game")
+    pbp, = ps1.installed(tmp_path / "GAME")
+    assert pbp == game / "EBOOT.PBP" and ps1.read(pbp) == {"title": "Metal Gear Solid", "icon0": b"ICON"}
+    ps1.edit(pbp, {"title": "MGS", "icon0": b"", "snd0": b"RIFFat3"})  # small: header rewritten in place
+    assert ps1.read(pbp) == {"title": "MGS", "snd0": b"RIFFat3"} and pbp.read_bytes()[0x10000:] == b"PSISOIMG0000disc"
+    ps1.edit(pbp, {"pic1": _png("blue", (640, 480)), "snd0": b"x" * 0x10000})  # too big: DATA.PSAR moves
+    out = pbp.read_bytes()
+    assert struct.unpack_from("<I", out, 36)[0] == 0x20000 and out[0x20000:] == b"PSISOIMG0000disc"
+    assert set(ps1.read(pbp)) == {"title", "pic1", "snd0"} and not list(game.glob("*.pspm"))

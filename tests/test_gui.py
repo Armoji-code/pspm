@@ -154,6 +154,8 @@ def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     p = Ps1Page(cfg)
     p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
+    p.job.wait()  # looking for converted games
+    app.processEvents()
     p.discs.addItems(["d1.cue", "d2.cue"])
     p.game_id.setText("SLUS-00594")
     p.find()
@@ -167,7 +169,36 @@ def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
     app.processEvents()
     assert got == {"discs": [Path("d1.cue"), Path("d2.cue")], "games": tmp_path / "PSP" / "GAME",
                    "meta": {"title": "Metal Gear Solid", "pic1": png}}
-    assert p.status.text() == "INSTALLED METAL GEAR SOLID TO PSP/GAME/SLUS00594" and not p.discs.count()
+    assert p.status.text() == "SAVED METAL GEAR SOLID TO PSP/GAME/SLUS00594" and not p.discs.count()
+
+
+def test_ps1_page_edits_converted_game(tmp_path):
+    from test_ps1 import _pbp
+
+    from pspm import device, ps1
+    from pspm.features.ps1 import Ps1Page
+
+    game = tmp_path / "PSP" / "GAME" / "SLUS00594"
+    game.mkdir(parents=True)
+    (game / "EBOOT.PBP").write_bytes(_pbp())
+    cfg = config.load(tmp_path / "x")
+    app = QApplication.instance() or QApplication([])
+    p = Ps1Page(cfg)
+    p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
+    p.job.wait()
+    app.processEvents()
+    assert p.games.count() == 2 and p.games.itemText(1) == "Metal Gear Solid · SLUS00594"
+    p.open(1)
+    p.job.wait()
+    app.processEvents()
+    assert p.title.text() == "Metal Gear Solid" and p.game_id.text() == "SLUS-00594" and p.go.text() == "SAVE"
+    p.title.setText("MGS")
+    p.set_res("icon0", None)
+    p.convert()
+    p.job.wait()
+    app.processEvents()
+    assert ps1.read(game / "EBOOT.PBP") == {"title": "MGS"} and p.games.itemText(1) == "MGS · SLUS00594"
+    assert p.status.text() == "SAVED MGS TO PSP/GAME/SLUS00594" and p.go.text() == "CONVERT"
 
 
 def test_stream_page_installs_plugin(tmp_path, monkeypatch):
