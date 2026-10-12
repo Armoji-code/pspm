@@ -99,7 +99,7 @@ def test_cat_tabs_subfolders_and_save_titles(dev, tmp_path):
     (save / "PARAM.SFO").write_bytes(_sfo(TITLE="Lumines", SAVEDATA_TITLE="Slot 1"))
     (save / "ICON0.PNG").write_bytes(b"png")
     e = files.list_items(dev, "saves")[0]
-    assert (e.name, e.title, e.icon) == ("ULUS10041DATA00", "Lumines · Slot 1", str(save / "ICON0.PNG"))
+    assert (e.name, e.title, files.thumb(save)) == ("ULUS10041DATA00", "Lumines · Slot 1", str(save / "ICON0.PNG"))
 
 
 def _iso(files_: dict) -> bytes:
@@ -156,7 +156,7 @@ def test_titles_and_thumbnails(dev, tmp_path):
     tags.add(APIC(encoding=1, mime="image/jpeg", type=3, desc="Cover", data=b"art"))
     tags.save(music / "s.mp3")
     (music / "plain.mp3").write_bytes(b"\xff\xfb")
-    look = lambda label: [(e.name, e.title, e.icon) for e in files.list_items(dev, label)]
+    look = lambda label: [(e.name, e.title, files.thumb(dev.path(label) / e.name)) for e in files.list_items(dev, label)]
     assert look("games") == [("Mini", "Patapon", icon)]
     assert look("isos") == [("a.iso", "Patapon", icon), ("b.cso", "Patapon", icon)]
     assert look("music") == [("Album", "", str(music / "Album" / "cover.jpg")), ("plain.mp3", "", ""),
