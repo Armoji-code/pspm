@@ -1,15 +1,14 @@
-"""A silver PSP-1000 (psp.svg, traced from the image the user picked): click a button or the stick to pick what it does on the PC; pressed buttons light up."""
+"""A silver PSP-1000 (psp.png, the image the user picked): click a button or the stick to pick what it does on the PC; pressed buttons light up."""
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from ..controls import BUTTONS
 
-SVG = Path(__file__).with_name("psp.svg")
-W, H = 600, 270  # the SVG's units; scaled to the widget
+IMAGE = Path(__file__).with_name("psp.png")  # 300x136, drawn at 2x
+W, H = 600, 270  # drawing units; scaled to the widget
 # control -> (x, y, w, h) over the drawing; round ones light up as circles
 SPOTS = {"l": (38, 8, 68, 22), "r": (494, 8, 68, 22),
          "up": (60, 81, 28, 30), "down": (60, 135, 28, 30), "left": (32, 109, 30, 28), "right": (86, 109, 30, 28),
@@ -27,7 +26,7 @@ class PspView(QWidget):
     def __init__(self, colors: dict):
         super().__init__()
         self.c, self.pressed, self.stick, self.hover = colors, 0, (128, 128), None
-        self.svg = QSvgRenderer(str(SVG), self)
+        self.image = QPixmap(str(IMAGE))
         self.setMouseTracking(True)
         self.setMinimumSize(W * 2 // 3, H * 2 // 3)
         self.setCursor(Qt.PointingHandCursor)
@@ -62,7 +61,8 @@ class PspView(QWidget):
         s, ox, oy = self._scale()
         p.translate(ox, oy)
         p.scale(s, s)
-        self.svg.render(p, QRectF(0, 0, W, H))
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.drawPixmap(QRectF(0, -1, 600, 272), self.image, QRectF(self.image.rect()))
         c = {k: QColor(v) for k, v in self.c.items()}
         p.setFont(QFont("Space Mono", 9))
         p.setPen(QColor("#d8d8d8"))
