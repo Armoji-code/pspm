@@ -182,7 +182,7 @@ class FilesPage(QWidget):
         hide = () if self.sub else [self.tabs.tabData(i) for i in range(1, self.tabs.count())]
         found = [(lb, e) for lb in self.labels() for e in files.list_items(self.dev, lb, self.sub, hide)]
         # shortcut: thumbnails load as the list is built, fine for a memory stick's worth; move to a thread if slow
-        for lb, e in sorted(found, key=lambda f: (f[1].title or f[1].name).lower()):
+        for lb, e in sorted(found, key=lambda f: ((f[1].title or f[1].name).lower(), f[1].name.lower())):
             it = QTreeWidgetItem(self.items, [(e.title or e.name) + ("/" if e.is_dir else ""), size(e.size)])
             it.setData(0, Qt.UserRole, (lb, (Path(self.sub) / e.name).as_posix(), e.is_dir))
             if e.title:

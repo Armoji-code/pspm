@@ -171,7 +171,7 @@ def list_items(dev: Device, label: str, sub: str = "", skip=()) -> list[Entry]:
     if not d.is_dir():
         return []
     found = (_entry(p) for p in d.iterdir() if p.name not in skip)
-    return sorted(found, key=lambda e: (e.title or e.name).lower())
+    return sorted(found, key=lambda e: ((e.title or e.name).lower(), e.name.lower()))
 
 
 def route(dev: Device, labels: list[str], src: Path, types: dict) -> str:
