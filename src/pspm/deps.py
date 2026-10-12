@@ -43,16 +43,33 @@ def commands(cfg: dict, tools: list[dict]) -> tuple[list[list[str]], list[dict]]
     return cmds, [t for t in tools if not t.get("packages", {}).get(m)]
 
 
-def install(cfg: dict, tools: list[dict]) -> list[dict]:
-    """Run the install commands (the package manager asks for the password or UAC). Opens the download page of the
+NEED_PASSWORD = "no password dialog on this desktop"
+
+
+class NeedPassword(OSError):
+    """pkexec can't ask for the password: no polkit agent runs (bare Sway, i3...) or pkexec isn't installed.
+    Call install again with the password; it then goes through sudo."""
+
+    def __init__(self):
+        super().__init__(NEED_PASSWORD)
+
+
+def install(cfg: dict, tools: list[dict], password: str | None = None) -> list[dict]:
+    """Run the install commands (pkexec or winget asks for the password or UAC). Opens the download page of the
     tools it can't install, and returns those."""
     cmds, manual = commands(cfg, tools)
     for c in cmds:
+        if c[0] == "pkexec" and (password is not None or not shutil.which("pkexec")):
+            if password is None:
+                raise NeedPassword
+            c = ["sudo", "-S", "-p", "", *c[1:]]
         try:
-            r = subprocess.run(c, capture_output=True, text=True, errors="replace", stdin=subprocess.DEVNULL,
-                               check=False)
+            r = subprocess.run(c, capture_output=True, text=True, errors="replace", check=False,
+                               input="" if password is None else password + "\n")
         except OSError as e:
             raise OSError(f"couldn't run {c[0]}; install by hand: {shlex.join(c)}") from e
+        if c[0] == "pkexec" and r.returncode == 127 and "agent" in r.stderr:
+            raise NeedPassword
         if r.returncode:
             raise OSError(f"{shlex.join(c)} failed: {(r.stderr or r.stdout).strip()[-300:]}")
     for t in manual:
