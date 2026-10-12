@@ -54,7 +54,7 @@ class StreamPage(QWidget):
         for text, fn in [("INSTALL PLUGIN", self.install), ("REMOVE PLUGIN", self.remove),
                          ("START VIEWER", self.start)]:
             b = QPushButton(text)
-            b.clicked.connect(fn)
+            b.clicked.connect(lambda _=False, fn=fn: fn())  # clicked(bool) would land in password
             bar.addWidget(b)
         self.cast_job, self.sending = None, False
         self.cast_status = QLabel()
@@ -66,7 +66,7 @@ class StreamPage(QWidget):
         for text, fn in [("INSTALL PSP APP", self.install_app), ("START SENDING", self.send),
                          ("STOP SENDING", self.stop_sending)]:
             b = QPushButton(text)
-            b.clicked.connect(fn)
+            b.clicked.connect(lambda _=False, fn=fn: fn())  # clicked(bool) would land in password
             cast_bar.addWidget(b)
         col = QVBoxLayout(self)
         col.addWidget(steps)

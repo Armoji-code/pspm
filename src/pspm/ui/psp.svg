@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 270">
+  <!-- PSP-1000 front, drawn for PSPM. Same units as SPOTS in psp.py. -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3b3f"/>
+      <stop offset="0.12" stop-color="#1d1e21"/>
+      <stop offset="0.85" stop-color="#121214"/>
+      <stop offset="1" stop-color="#050506"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9a9ca2"/>
+      <stop offset="0.5" stop-color="#4b4d52"/>
+      <stop offset="1" stop-color="#8a8c92"/>
+    </linearGradient>
+    <linearGradient id="shoulder" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a5c61"/>
+      <stop offset="1" stop-color="#26272a"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#202124"/>
+      <stop offset="0.4" stop-color="#0b0b0c"/>
+      <stop offset="1" stop-color="#050505"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="0.46" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="well" cx="0.5" cy="0.4" r="0.6">
+      <stop offset="0.75" stop-color="#0c0c0d"/>
+      <stop offset="1" stop-color="#26272a"/>
+    </radialGradient>
+    <radialGradient id="key" cx="0.4" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#4a4b50"/>
+      <stop offset="1" stop-color="#18191b"/>
+    </radialGradient>
+    <radialGradient id="nub" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#6b6d72"/>
+      <stop offset="0.7" stop-color="#3a3b3f"/>
+      <stop offset="1" stop-color="#1c1d1f"/>
+    </radialGradient>
+  </defs>
+
+  <!-- shoulder buttons, behind the body -->
+  <path d="M30 22 Q34 4 70 4 H140 V22 Z" fill="url(#shoulder)" stroke="#111" stroke-width="1"/>
+  <path d="M570 22 Q566 4 530 4 H460 V22 Z" fill="url(#shoulder)" stroke="#111" stroke-width="1"/>
+
+  <!-- body -->
+  <rect x="8" y="14" width="584" height="252" rx="118" fill="url(#rim)"/>
+  <rect x="11" y="17" width="578" height="246" rx="115" fill="url(#body)"/>
+
+  <!-- screen glass and LCD -->
+  <rect x="126" y="24" width="348" height="208" rx="6" fill="url(#glass)" stroke="#2c2d31" stroke-width="1"/>
+  <rect x="138" y="36" width="324" height="184" fill="#000"/>
+  <rect x="126" y="24" width="348" height="208" rx="6" fill="url(#shine)"/>
+  <text x="140" y="31" font-family="Arial, Helvetica, sans-serif" font-size="6" font-weight="bold" fill="#8d8f94">SONY</text>
+
+  <!-- d-pad -->
+  <circle cx="70" cy="92" r="38" fill="url(#well)"/>
+  <g fill="url(#key)" stroke="#000" stroke-width="0.8">
+    <path d="M60 64 h20 v16 l-10 10 l-10 -10 Z"/>
+    <path d="M60 120 h20 v-16 l-10 -10 l-10 10 Z"/>
+    <path d="M42 82 v20 h16 l10 -10 l-10 -10 Z"/>
+    <path d="M98 82 v20 h-16 l-10 -10 l10 -10 Z"/>
+  </g>
+  <g fill="#8d8f94">
+    <path d="M70 68 l4 6 h-8 Z"/>
+    <path d="M70 116 l4 -6 h-8 Z"/>
+    <path d="M46 92 l6 -4 v8 Z"/>
+    <path d="M94 92 l-6 -4 v8 Z"/>
+  </g>
+
+  <!-- analog nub -->
+  <rect x="44" y="158" width="44" height="44" rx="12" fill="url(#well)"/>
+  <circle cx="66" cy="180" r="17" fill="url(#nub)" stroke="#0a0a0b" stroke-width="1"/>
+  <circle cx="66" cy="180" r="11" fill="none" stroke="#2a2b2e" stroke-width="1"/>
+
+  <!-- home -->
+  <rect x="40" y="226" width="34" height="11" rx="5.5" fill="url(#key)" stroke="#000" stroke-width="0.8"/>
+  <text x="57" y="234" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="6" fill="#8d8f94">HOME</text>
+
+  <!-- face buttons -->
+  <circle cx="530" cy="92" r="42" fill="url(#well)"/>
+  <g fill="url(#key)" stroke="#000" stroke-width="0.8">
+    <circle cx="530" cy="72" r="12"/>
+    <circle cx="530" cy="112" r="12"/>
+    <circle cx="510" cy="92" r="12"/>
+    <circle cx="550" cy="92" r="12"/>
+  </g>
+  <g fill="none" stroke-width="1.6">
+    <path d="M530 66 l6 10 h-12 Z" stroke="#3fbf9a"/>
+    <path d="M525 107 l10 10 M535 107 l-10 10" stroke="#7aa8e8"/>
+    <rect x="505" y="87" width="10" height="10" stroke="#e48ac0"/>
+    <circle cx="550" cy="92" r="5.5" stroke="#ff5a5a"/>
+  </g>
+
+  <!-- bottom strip: volume, display, sound, select, start -->
+  <g fill="url(#key)" stroke="#000" stroke-width="0.8">
+    <rect x="184" y="238" width="22" height="8" rx="4"/>
+    <rect x="212" y="238" width="22" height="8" rx="4"/>
+    <rect x="258" y="238" width="22" height="8" rx="4"/>
+    <rect x="286" y="238" width="22" height="8" rx="4"/>
+    <rect x="388" y="236" width="30" height="10" rx="5"/>
+    <rect x="428" y="236" width="30" height="10" rx="5"/>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="5" fill="#8d8f94" text-anchor="middle">
+    <text x="195" y="254">−</text>
+    <text x="223" y="254">+</text>
+    <text x="209" y="254">VOL</text>
+    <text x="403" y="255">SELECT</text>
+    <text x="443" y="255">START</text>
+  </g>
+  <!-- speaker -->
+  <g fill="#050506">
+    <circle cx="520" cy="190" r="1.4"/><circle cx="526" cy="190" r="1.4"/><circle cx="532" cy="190" r="1.4"/>
+    <circle cx="523" cy="195" r="1.4"/><circle cx="529" cy="195" r="1.4"/>
+    <circle cx="520" cy="200" r="1.4"/><circle cx="526" cy="200" r="1.4"/><circle cx="532" cy="200" r="1.4"/>
+  </g>
+  <text x="530" y="222" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9" font-style="italic" font-weight="bold" fill="#5b5d62">PSP</text>
+</svg>
