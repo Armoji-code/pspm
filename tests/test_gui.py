@@ -309,7 +309,7 @@ def test_setup_page_installs_missing(tmp_path, monkeypatch):
 
     got = []
     monkeypatch.setattr(deps, "found", lambda check: bool(got))
-    monkeypatch.setattr(deps, "install", lambda cfg, tools: got.extend(tools) or [])
+    monkeypatch.setattr(deps, "install", lambda cfg, tools, pw=None: got.extend(tools) or [])
     monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.Yes)
     app = QApplication.instance() or QApplication([])
     p = SetupPage(config.load(tmp_path / "x"))
