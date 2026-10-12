@@ -104,7 +104,7 @@ chunk_mb = 64             # files bigger than this upload in parts (Dropbox caps
 # Diagnostics. Battery, firmware and model can't be read over USB: the PSPM Info app (installed from the
 # DIAGNOSTICS page, needs custom firmware) writes them to info_file when run on the PSP.
 [diag]
-info_app_folder = "PSP/GAME/PSPM_INFO"
+info_app = "PSPM_INFO"  # folder in the games folder, or in the CAT_ folder picked on the page
 info_file = "PSP/COMMON/pspm_info.txt"
 test_folder = "PSPM_TEST"  # capacity test data, removed after VERIFY
 test_file_mb = 1024        # size of each test file (FAT32 caps files at 4 GB)
@@ -175,7 +175,7 @@ linux = ["bash", "{dir}/x64_linux/start_linux_EN.sh"]
 
 # Screen streaming, PC to PSP: PSPM Screen (PSPM's own PSP app, psp/pspm_screen) shows frames PSPM sends over USB.
 [cast]
-app_folder = "PSP/GAME/PSPM_SCREEN"
+app = "PSPM_SCREEN"   # folder in the games folder, or in the CAT_ folder picked on the page
 vendor = 0x054C
 product = 0x01C9      # PSPLink's "Type B", so RemoteJoyLite's Windows driver (Zadig) and the udev rule cover it
 bcd_device = 0x0200   # tells PSPM Screen apart from RemoteJoyLite (0x0100) on the same ID

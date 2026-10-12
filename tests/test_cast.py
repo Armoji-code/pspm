@@ -46,3 +46,12 @@ def test_open_says_how_to_start_the_psp_app(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="PSPM SCREEN"):
         cast.open_psp(cfg)
     assert "01c9" in (tmp_path / "60-psp-b-usb.rules").read_text()
+
+
+def test_install_app_into_category_moves_old_copy(tmp_path):
+    cfg = config.load(tmp_path / "x")
+    dev = device.Device(tmp_path, cfg["device"]["folders"])
+    cast.install_app(dev, cfg)
+    dest = cast.install_app(dev, cfg, "CAT_Tools")
+    assert dest == dev.path("games") / "CAT_Tools" / "PSPM_SCREEN" and cast.installed(dev, cfg)
+    assert not (dev.path("games") / "PSPM_SCREEN").exists()

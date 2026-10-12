@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import ps1
+from ..ui.category import CategoryPicker
 from .saves import _Job
 
 SLOTS = {"icon0": "ICON", "pic0": "INFO PICTURE", "pic1": "BACKGROUND", "snd0": "MUSIC (AT3)"}
@@ -60,6 +61,8 @@ class Ps1Page(QWidget):
         top.addLayout(side)
         bar = QHBoxLayout()
         bar.addWidget(self.status, 1)
+        self.cat = CategoryPicker(cfg, "ps1")
+        bar.addWidget(self.cat)
         for text, fn in [("ADD DISCS", self.add), ("CLEAR", self.clear), ("CONVERT", self.convert)]:
             b = QPushButton(text)
             b.clicked.connect(fn)
@@ -73,6 +76,7 @@ class Ps1Page(QWidget):
 
     def set_device(self, dev):
         self.dev = dev
+        self.cat.set_device(dev)
         if not self._busy():
             self._ready()
             self.refresh()
@@ -206,7 +210,7 @@ class Ps1Page(QWidget):
             return
         discs = [Path(self.discs.item(i).text()) for i in range(self.discs.count())]
         meta = {k: v for k, v in self.meta.items() if v} | {"title": self.title.text().strip()}
-        games = self.dev.path("games")
+        games = self.dev.path("games") / self.cat.folder()
         self._run("CONVERTING… (THE FIRST TIME ALSO DOWNLOADS PSXPACKAGER)",
                   lambda: ps1.convert(discs, games, self.cfg, meta), self._done)
 
@@ -214,7 +218,8 @@ class Ps1Page(QWidget):
         self.clear()
         self._show(dest / "EBOOT.PBP")
         name = ps1.title(dest / "EBOOT.PBP") or dest.name
-        self.status.setText(f"SAVED {name} TO {self.cfg['device']['folders']['games']}/{dest.name}".upper())
+        where = dest.relative_to(self.dev.root).as_posix() if self.dev else dest.name
+        self.status.setText(f"SAVED {name} TO {where}".upper())
 
 
 class _Feature:

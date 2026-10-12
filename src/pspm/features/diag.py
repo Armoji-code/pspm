@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import diag
+from ..ui.category import CategoryPicker
 from ..ui.fmt import size
 from .saves import _Job
 
@@ -36,6 +37,8 @@ class DiagPage(QWidget):
         self.test.clicked.connect(self.capacity)
         bar = QHBoxLayout()
         bar.addWidget(self.status, 1)
+        self.cat = CategoryPicker(cfg, "diag")
+        bar.addWidget(self.cat)
         for text, fn in [("INSTALL INFO APP", self.install), ("CHECK FILESYSTEM", self.check),
                          ("TEST SPEED", self.speed)]:
             b = QPushButton(text)
@@ -85,6 +88,7 @@ class DiagPage(QWidget):
 
     def set_device(self, dev):
         self.dev = dev
+        self.cat.set_device(dev)
         while self.grid.count():
             self.grid.takeAt(0).widget().deleteLater()
         if not dev:
@@ -111,7 +115,7 @@ class DiagPage(QWidget):
         if not self.dev:
             return
         try:
-            dest = diag.install_app(self.dev, self.cfg)
+            dest = diag.install_app(self.dev, self.cfg, self.cat.folder())
         except OSError as e:
             self.status.setText(f"[ERROR: {e}]".upper())
             return

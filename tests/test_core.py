@@ -175,3 +175,18 @@ def test_route_and_move(dev, tmp_path):
     files.copy_in(dev, "isos", [moved], "", move=True)  # dropped where it is: nothing to do
     files.copy_in(dev, "isos", [moved], "CAT_X", move=True)
     assert not moved.exists() and (dev.path("isos") / "CAT_X" / "g.ISO").is_file()
+
+
+def test_categories_and_remembered_choice(tmp_path):
+    from pspm import config, device, files
+
+    cfg = config.load(tmp_path / "x")
+    dev = device.Device(tmp_path, cfg["device"]["folders"])
+    for d in ("CAT_PS1", "CAT_Tools/App", "Other"):
+        (dev.path("games") / d).mkdir(parents=True)
+    assert files.categories(dev, cfg) == ["CAT_PS1", "CAT_Tools"]
+    assert files.find_app(dev, "App") == dev.path("games") / "CAT_Tools" / "App"
+    state = tmp_path / "categories.json"
+    files.choose("ps1", "CAT_PS1", state)
+    files.choose("diag", "CAT_Tools", state)
+    assert files.chosen("ps1", state) == "CAT_PS1" and files.chosen("stream", state) == ""

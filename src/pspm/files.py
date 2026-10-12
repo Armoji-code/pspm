@@ -2,6 +2,7 @@
 
 `sub` and `name` are paths relative to the category folder, e.g. "CAT_GBA" or "CAT_GBA/Pokemon".
 """
+import json
 import shutil
 import struct
 import zlib
@@ -9,10 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mutagen.id3 import ID3, ID3NoHeaderError
+from platformdirs import user_data_path
 
 from . import theme
 from .device import Device
 
+CATEGORIES = user_data_path("pspm") / "categories.json"  # page -> CAT_ folder it installs into
 IMAGES = {".png", ".jpg", ".jpeg", ".bmp", ".gif"}
 SECTOR = 2048
 
@@ -181,6 +184,38 @@ def tabs(dev: Device, label: str, prefix: str) -> list[str]:
     d = dev.path(label)
     return sorted((p.name for p in d.iterdir() if p.is_dir() and p.name.startswith(prefix)),
                   key=str.lower) if d.is_dir() else []
+
+
+def categories(dev: Device, cfg: dict) -> list[str]:
+    """CAT_ folders in the games folder: where an app or game can be installed."""
+    return tabs(dev, "games", cfg["files"]["tabs"]["games"])
+
+
+def find_app(dev: Device, name: str) -> Path | None:
+    """An app's folder in the games folder or one of its category folders."""
+    games = dev.path("games")
+    return next((p for p in [games / name, *games.glob(f"*/{name}")] if p.is_dir()), None)
+
+
+def app_dir(dev: Device, name: str, cat: str = "") -> Path:
+    """games/<cat>/<name> ("" = no category), moving an older copy there from another category so there's one."""
+    dest = dev.path("games") / cat / name
+    old = find_app(dev, name)
+    if old and old != dest and not dest.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(old, dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    return dest
+
+
+def chosen(page: str, path: Path = CATEGORIES) -> str:
+    return json.loads(path.read_text()).get(page, "") if path.exists() else ""
+
+
+def choose(page: str, cat: str, path: Path = CATEGORIES) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    old = json.loads(path.read_text()) if path.exists() else {}
+    path.write_text(json.dumps(old | {page: cat}, indent=1))
 
 
 def list_items(dev: Device, label: str, sub: str = "", skip=()) -> list[Entry]:

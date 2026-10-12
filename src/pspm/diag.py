@@ -9,6 +9,7 @@ from pathlib import Path
 
 import psutil
 
+from . import files as fm
 from . import platform
 from .device import Device
 
@@ -22,9 +23,8 @@ LANGUAGES = ["Japanese", "English", "French", "Spanish", "German", "Italian", "D
 TOOLKIT = {"0": "retail", "1": "testing tool", "2": "development tool"}
 
 
-def install_app(dev: Device, cfg: dict) -> Path:
-    dest = dev.root / cfg["diag"]["info_app_folder"]
-    dest.mkdir(parents=True, exist_ok=True)
+def install_app(dev: Device, cfg: dict, cat: str = "") -> Path:
+    dest = fm.app_dir(dev, cfg["diag"]["info_app"], cat)
     (dest / "EBOOT.PBP").write_bytes(APP.read_bytes())
     return dest
 

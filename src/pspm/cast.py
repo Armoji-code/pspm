@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageChops, ImageOps
 
+from . import files as fm
 from . import platform, tools
 from .device import Device
 
@@ -18,16 +19,16 @@ _LO_R, _LO_G = [v >> 3 for v in range(256)], [(v >> 2 & 7) << 5 for v in range(2
 _HI_G, _HI_B = [v >> 5 for v in range(256)], [v >> 3 << 3 for v in range(256)]
 
 
-def install_app(dev: Device, cfg: dict) -> Path:
-    dest = dev.root / cfg["cast"]["app_folder"]
-    dest.mkdir(parents=True, exist_ok=True)
+def install_app(dev: Device, cfg: dict, cat: str = "") -> Path:
+    dest = fm.app_dir(dev, cfg["cast"]["app"], cat)
     for name in ("EBOOT.PBP", "pspm_usb.prx"):
         (dest / name).write_bytes(APP.joinpath(name).read_bytes())
     return dest
 
 
 def installed(dev: Device, cfg: dict) -> bool:
-    return (dev.root / cfg["cast"]["app_folder"] / "pspm_usb.prx").is_file()
+    found = fm.find_app(dev, cfg["cast"]["app"])
+    return bool(found) and (found / "pspm_usb.prx").is_file()
 
 
 def frame(img: Image.Image) -> bytes:
