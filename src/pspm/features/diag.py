@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -21,9 +22,13 @@ from .saves import _Job
 class DiagPage(QWidget):
     def __init__(self, cfg):
         super().__init__()
-        self.cfg, self.dev, self.job, self.prog = cfg, None, None, None
+        self.cfg, self.dev, self.job, self.prog, self.scan = cfg, None, None, None, None
         self.stopping = threading.Event()
-        self.grid = QGridLayout()
+        box = QWidget()
+        self.grid = QGridLayout(box)
+        self.grid.setColumnStretch(1, 1)
+        scroll = QScrollArea(widgetResizable=True)
+        scroll.setWidget(box)
         self.out = QPlainTextEdit(readOnly=True)
         self.status = QLabel()
         self.status.setObjectName("label")
@@ -31,7 +36,8 @@ class DiagPage(QWidget):
         self.test.clicked.connect(self.capacity)
         bar = QHBoxLayout()
         bar.addWidget(self.status, 1)
-        for text, fn in [("INSTALL INFO APP", self.install), ("CHECK FILESYSTEM", self.check)]:
+        for text, fn in [("INSTALL INFO APP", self.install), ("CHECK FILESYSTEM", self.check),
+                         ("TEST SPEED", self.speed)]:
             b = QPushButton(text)
             b.clicked.connect(fn)
             bar.addWidget(b)
@@ -41,7 +47,7 @@ class DiagPage(QWidget):
         stop.clicked.connect(self.stopping.set)
         bar.addWidget(stop)
         col = QVBoxLayout(self)
-        col.addLayout(self.grid)
+        col.addWidget(scroll, 3)
         col.addWidget(self.out, 1)
         col.addLayout(bar)
         self.timer = QTimer(self, interval=500, timeout=self._tick)
@@ -64,6 +70,19 @@ class DiagPage(QWidget):
             done, total, verb = self.prog
             self.status.setText(f"{verb} {done} / {total} MB · STOP TO CANCEL")
 
+    def _add(self, title, rows):
+        r = self.grid.rowCount()
+        head = QLabel(title)
+        head.setObjectName("label")
+        head.setContentsMargins(0, 12 if r > 1 else 0, 0, 4)
+        self.grid.addWidget(head, r, 0, 1, 2)
+        for i, (k, v) in enumerate(rows, r + 1):
+            key = QLabel(k.replace("_", " ").upper())
+            key.setObjectName("label")
+            val = QLabel(str(v).upper(), wordWrap=True)
+            self.grid.addWidget(key, i, 0)
+            self.grid.addWidget(val, i, 1)
+
     def set_device(self, dev):
         self.dev = dev
         while self.grid.count():
@@ -72,19 +91,18 @@ class DiagPage(QWidget):
             self.status.setText("[NO PSP CONNECTED]")
             self.test.setText("TEST CAPACITY")
             return
-        u = dev.usage()
-        rows = [("SPACE", f"{size(u.used)} USED · {size(u.free)} FREE · {size(u.total)} TOTAL")]
         info = diag.read_info(dev, self.cfg)
         if info:
             when = time.strftime("%Y-%m-%d %H:%M", time.localtime(info.pop("written")))
-            rows += [(k.replace("_", " ").upper(), v.upper()) for k, v in info.items()] + [("READ ON PSP", when)]
+            self._add("PSP", [*info.items(), ("read on psp", when)])
         else:
-            rows.append(("PSP INFO", "INSTALL THE INFO APP, RUN IT ON THE PSP, THEN PLUG IT IN AGAIN"))
-        for r, (k, v) in enumerate(rows):
-            key = QLabel(k)
-            key.setObjectName("label")
-            self.grid.addWidget(key, r, 0)
-            self.grid.addWidget(QLabel(v), r, 1)
+            self._add("PSP", [("psp info", "install the info app, run it on the psp, then plug it in again")])
+        u = dev.usage()
+        self._add("MEMORY STICK", [("space", f"{size(u.used)} used · {size(u.free)} free · {size(u.total)} total")])
+        # Own thread, not self.job: walking the whole stick shouldn't block the other buttons.
+        self.scan = _Job(lambda: diag.stick(dev, self.cfg), self)
+        self.scan.done.connect(lambda rows, job=self.scan: job is self.scan and self._add("FILES ON STICK", rows.items()))
+        self.scan.start()
         pending = diag.test_dir(dev, self.cfg).is_dir()
         self.test.setText("VERIFY CAPACITY" if pending else "TEST CAPACITY")
         self.status.setText("[TEST DATA WRITTEN · PRESS VERIFY CAPACITY]" if pending else "READY")
@@ -102,6 +120,13 @@ class DiagPage(QWidget):
     def check(self):
         if self.dev:
             self._run(lambda: diag.fs_check(self.dev), self._checked, "CHECKING FILESYSTEM (READ ONLY)…")
+
+    def speed(self):
+        if self.dev:
+            self._run(lambda: diag.speed(self.dev, self.cfg), self._speeds, "TESTING SPEED…")
+
+    def _speeds(self, res):
+        self.status.setText(f"WRITE {res[0]:.1f} MB/S · READ {res[1]:.1f} MB/S")
 
     def _checked(self, res):
         code, text = res

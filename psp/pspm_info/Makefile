@@ -1,7 +1,7 @@
 TARGET = pspm_info
 OBJS = main.o
 CFLAGS = -O2 -Wall
-LIBS = -lpspkubridge -lpsppower
+LIBS = -lpspkubridge -lpspsystemctrl_user -lpsppower -lpsputility -lpsprtc -lpspumd -lpsphprm -lpspwlan -lpspopenpsid
 BUILD_PRX = 1
 EXTRA_TARGETS = EBOOT.PBP
 PSP_EBOOT_TITLE = PSPM Info

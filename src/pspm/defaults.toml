@@ -107,6 +107,11 @@ info_file = "PSP/COMMON/pspm_info.txt"
 test_folder = "PSPM_TEST"  # capacity test data, removed after VERIFY
 test_file_mb = 1024        # size of each test file (FAT32 caps files at 4 GB)
 test_reserve_mb = 16       # free space left untouched by the capacity test
+speed_test_mb = 64         # size of the TEST SPEED write and read
+junk = ["._*", ".DS_Store", "Thumbs.db", "desktop.ini"]  # leftovers from other computers, counted on the stick
+plugin_lists = ["SEPLUGINS/PLUGINS.TXT", "SEPLUGINS/GAME.TXT", "SEPLUGINS/VSH.TXT", "SEPLUGINS/POPS.TXT"]
+[diag.cfw_folders]         # a folder on the stick -> the custom firmware it belongs to (add others here)
+"PSP/SAVEDATA/ARK_01234" = "ARK"
 
 # PS1 converter. Turns PS1 disc images into an EBOOT.PBP in the games folder, for the PSP's PS1 emulator.
 # Uses PSXPackager (MIT, github.com/RupertAvery/PSXPackager), downloaded on first use and checked by sha256.
