@@ -31,6 +31,10 @@ The side that changed since the last sync wins. If a save changed on both, PSPM 
 Every overwritten save is moved to a backup folder first, and deleting a save on one side never deletes it on the other.
 If PPSSPP isn't found (portable install, custom memstick), press PPSSPP FOLDER and pick its `PSP/SAVEDATA`.
 
+While the PSP is plugged in and PSPM is open, its games show up in PPSSPP too, without copying: in PPSSPP's Games tab, browse to
+`PSP_STICK` in its memory stick folder (`~/.config/ppsspp/PSP_STICK` on Linux, `Documents\PPSSPP\PSP_STICK` on Windows) and open
+`isos` or `games`. PPSSPP remembers the folder. PSPM removes the links when you unplug, so close the game first.
+
 ## Cloud backup
 
 Open CLOUD BACKUP, press SIGN IN TO GOOGLE DRIVE, approve in your browser, and type a folder name (default `PSPM`).
