@@ -90,3 +90,15 @@ def test_plan_shows_descriptions_and_apply_skips_stale_items(tmp_path):
     put(psp, "A", b"psp-played-since")  # changed after the plan: copying it now would act on old information
     saves.apply([a], psp, pc, last, bk)
     assert a.action == saves.SKIP and not (pc / "A").exists() and "A" not in last
+
+
+def test_hash_cache_skips_unchanged_saves(tmp_path, monkeypatch):
+    psp, pc, bk, last, cache = tmp_path / "psp", tmp_path / "pc", tmp_path / "bk", {}, {}
+    put(psp, "A", b"x")
+    saves.apply(saves.plan(psp, pc, last, cache), psp, pc, last, bk, cache)
+    assert set(cache) == {str(psp / "A"), str(pc / "A")}  # the copy is cached too
+    read, real = [], saves.Path.read_bytes
+    monkeypatch.setattr(saves.Path, "read_bytes", lambda p: read.append(p) or real(p))
+    assert saves.plan(psp, pc, last, cache)[0].action == saves.SAME and all(p.name == "PARAM.SFO" for p in read)  # no save data re-read
+    put(psp, "A", b"played")
+    assert saves.plan(psp, pc, last, cache)[0].action == saves.TO_PC

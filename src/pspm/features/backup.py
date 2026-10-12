@@ -176,7 +176,10 @@ class BackupPage(QWidget):
 
         def plan():
             with saves.LOCK:
-                return saves.plan(psp, pc, saves.load_state(self.saves_state)["last"])
+                st = saves.load_state(self.saves_state)
+                items = saves.plan(psp, pc, st["last"], st.setdefault("hashes", {}))
+                saves.save_state(st, self.saves_state)
+                return items
 
         self._run(plan, lambda items: self._upload(self._ask(items), (psp, pc)), "SYNCING PSP AND PPSSPP…")
 
@@ -203,7 +206,7 @@ class BackupPage(QWidget):
             if items:
                 with saves.LOCK:
                     st = saves.load_state(self.saves_state)
-                    saves.apply(items, *dirs, st["last"], self.save_backups)
+                    saves.apply(items, *dirs, st["last"], self.save_backups, st.setdefault("hashes", {}))
                     saves.save_state(st, self.saves_state)
             synced = sum(i.action in (saves.TO_PC, saves.TO_PSP) for i in items)
             files = backup.scan(root, folders)
