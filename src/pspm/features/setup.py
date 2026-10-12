@@ -1,7 +1,9 @@
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -67,12 +69,24 @@ class SetupPage(QWidget):
                 f"{t['name']}" + (f" ({t['note']})" if t.get("note") else "") for t in manual)
         if QMessageBox.question(self, "Install", f"Run this? It asks for your password.\n\n{text}") != QMessageBox.Yes:
             return
+        self._run(tools)
+
+    def _run(self, tools, password=None):
         self.status.setText("INSTALLING…")
         self.btn.setEnabled(False)
-        self.job = _Job(lambda: deps.install(self.cfg, tools), self)
+        self.job = _Job(lambda: deps.install(self.cfg, tools, password), self)
         self.job.done.connect(self._done)
-        self.job.failed.connect(lambda e: (self.refresh(), self.status.setText(f"[ERROR: {e}]".upper())))
+        self.job.failed.connect(lambda e: self._failed(e, tools))
         self.job.start()
+
+    def _failed(self, e, tools):
+        self.refresh()
+        if e == deps.NEED_PASSWORD:  # no polkit agent (SwayFX, i3...): ask here, install through sudo
+            pw, ok = QInputDialog.getText(self, "Install", "Your password (for sudo):", QLineEdit.Password)
+            if ok:
+                return self._run(tools, pw)
+            e = "cancelled"
+        self.status.setText(f"[ERROR: {e}]".upper())
 
     def _done(self, manual):
         self.refresh()

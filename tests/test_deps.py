@@ -1,5 +1,7 @@
 import subprocess
 
+import pytest
+
 from pspm import config, deps
 
 
@@ -16,7 +18,7 @@ def test_missing_tools_install_with_the_pcs_package_manager(tmp_path, monkeypatc
     assert [t["name"] for t in deps.missing(cfg)] == ["Wine", "Driver"]  # Off's feature isn't enabled
     assert deps.missing(cfg, "files") == []
     ran, opened = [], []
-    monkeypatch.setattr(deps.shutil, "which", lambda m: m == "pacman")
+    monkeypatch.setattr(deps.shutil, "which", lambda m: m in ("pacman", "pkexec"))
     monkeypatch.setattr(subprocess, "run", lambda c, **kw: ran.append(c) or subprocess.CompletedProcess(c, 0))
     monkeypatch.setattr(deps.webbrowser, "open", opened.append)
     assert [t["name"] for t in deps.install(cfg, deps.missing(cfg))] == ["Driver"]
@@ -38,3 +40,21 @@ def test_every_tool_has_a_check_and_a_way_to_install(tmp_path):
     for t in cfg["deps"]["tools"].values():
         assert t["check"] and set(t["features"]) <= set(cfg["app"]["features"])
         assert t.get("url") or set(t["packages"]) <= set(cfg["deps"]["managers"]), t["name"]
+
+
+def test_without_a_polkit_agent_it_asks_for_the_password_and_uses_sudo(tmp_path, monkeypatch):
+    cfg = config.load(tmp_path / "x")
+    tools = [{"name": "Wine", "packages": {"pacman": ["wine"]}}]
+    monkeypatch.setattr(deps.shutil, "which", lambda m: m in ("pacman", "pkexec"))
+    ran = []
+
+    def run(c, **kw):
+        ran.append((c, kw["input"]))
+        no_agent = c[0] == "pkexec"
+        return subprocess.CompletedProcess(c, 127 if no_agent else 0, "", "No authentication agent found." * no_agent)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(deps.NeedPassword, match=deps.NEED_PASSWORD):
+        deps.install(cfg, tools)
+    assert deps.install(cfg, tools, "pw") == []
+    assert ran[-1] == (["sudo", "-S", "-p", "", "pacman", "-S", "--needed", "--noconfirm", "wine"], "pw\n")

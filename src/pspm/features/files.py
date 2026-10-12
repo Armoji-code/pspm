@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, QSize, Qt, QUrl
-from PySide6.QtGui import QIcon, QImage, QImageReader, QPixmap
+from PySide6.QtCore import QBuffer, QByteArray, QMimeData, QObject, QSize, Qt, QThreadPool, QTimer, QUrl, Signal
+from PySide6.QtGui import QIcon, QImageReader, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -22,17 +22,47 @@ from ..ui.fmt import size
 from .saves import _Job
 
 
-def _icon(src, box: QSize):
-    """Thumbnail from an image file (read scaled down, so big photos stay quick) or image data."""
+def _image(src, box: QSize):
+    """Image file or data, decoded straight to thumbnail size (JPEG art skips most of the work), or None."""
+    buf = None
     if isinstance(src, bytes):
-        img = QImage.fromData(src)
-    else:
-        r = QImageReader(src)
-        r.setAutoTransform(True)
-        if r.size().isValid():
-            r.setScaledSize(r.size().scaled(box, Qt.KeepAspectRatio))
-        img = r.read()
-    return None if img.isNull() else QIcon(QPixmap.fromImage(img))
+        buf = QBuffer()
+        buf.setData(QByteArray(src))
+    r = QImageReader(buf) if buf else QImageReader(src)
+    r.setAutoTransform(True)
+    if r.size().isValid():
+        r.setScaledSize(r.size().scaled(box, Qt.KeepAspectRatio))
+    img = r.read()
+    return None if img.isNull() else img
+
+
+class Thumbs(QObject):
+    """Thumbnails and folder sizes, read and scaled off the UI thread for the rows asked for, cached by path+mtime."""
+
+    ready = Signal(str, object, object)  # path, QImage or None, folder size or None
+
+    def __init__(self, box: QSize, parent):
+        super().__init__(parent)
+        self.box, self.cache, self.pool = box, {}, QThreadPool(self)
+        self.pool.setMaxThreadCount(2)  # one memory stick: more readers only make it seek more
+
+    def want(self, paths):
+        self.pool.clear()  # rows queued earlier have scrolled away
+        for p in paths:
+            self.pool.start(lambda p=p: self._load(p))
+
+    def _load(self, p: Path):
+        try:
+            key = (p, p.stat().st_mtime_ns)
+            got = self.cache.get(key)
+            if not got:
+                if len(self.cache) > 3000:  # shortcut: drop everything when full, an LRU if people browse huge sticks
+                    self.cache.clear()
+                src = files.thumb(p)
+                got = self.cache[key] = (src and _image(src, self.box), files.size_of(p) if p.is_dir() else None)
+        except Exception:  # noqa: BLE001 - unplugged mid-read or a broken file: the row just keeps no thumbnail
+            return
+        self.ready.emit(str(p), *got)
 
 
 def _accept(e):
@@ -104,6 +134,10 @@ class FilesPage(QWidget):
         self.items.setColumnWidth(0, 420)
         self.items.setIconSize(QSize(90, 50))  # ICON0 is 144x80
         self.items.itemDoubleClicked.connect(self.enter)
+        self.rows, self.thumbs = {}, Thumbs(self.items.iconSize(), self)
+        self.thumbs.ready.connect(self.show_thumb)
+        self.later = QTimer(self, singleShot=True, interval=50, timeout=self.load_visible)  # once scrolling settles
+        self.items.verticalScrollBar().valueChanged.connect(self.later.start)
         self.status = QLabel()
         self.status.setObjectName("label")
         self.status.setMinimumWidth(1)  # long paths get cut instead of squeezing the category list
@@ -172,6 +206,7 @@ class FilesPage(QWidget):
 
     def refresh(self, *_):
         self.items.clear()
+        self.rows = {}
         cat = self.cat()
         if not (self.dev and cat):
             self.status.setText("[NO PSP CONNECTED]")
@@ -181,15 +216,37 @@ class FilesPage(QWidget):
             QTreeWidgetItem(self.items, ["../", ""]).setData(0, Qt.UserRole, self.UP)
         hide = () if self.sub else [self.tabs.tabData(i) for i in range(1, self.tabs.count())]
         found = [(lb, e) for lb in self.labels() for e in files.list_items(self.dev, lb, self.sub, hide)]
-        # shortcut: thumbnails load as the list is built, fine for a memory stick's worth; move to a thread if slow
         for lb, e in sorted(found, key=lambda f: ((f[1].title or f[1].name).lower(), f[1].name.lower())):
-            it = QTreeWidgetItem(self.items, [(e.title or e.name) + ("/" if e.is_dir else ""), size(e.size)])
+            it = QTreeWidgetItem(self.items, [(e.title or e.name) + ("/" if e.is_dir else ""),
+                                              "" if e.size is None else size(e.size)])
             it.setData(0, Qt.UserRole, (lb, (Path(self.sub) / e.name).as_posix(), e.is_dir))
+            self.rows[str(self.path_of(it))] = it
             if e.title:
                 it.setToolTip(0, e.name)
-            if e.icon and (icon := _icon(e.icon, self.items.iconSize())):
-                it.setIcon(0, icon)
+        self.later.start()
         self.status.setText((self.dev.path(cat) / self.sub).relative_to(self.dev.root).as_posix().upper())
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.later.start()
+
+    def load_visible(self):
+        """Ask for the thumbnails of the rows on screen and one screen below."""
+        view, it, want = self.items.viewport(), self.items.itemAt(0, 0), []
+        while it and self.items.visualItemRect(it).top() < 2 * view.height():
+            if (p := self.path_of(it)) and not it.data(1, Qt.UserRole):
+                want.append(p)
+            it = self.items.itemBelow(it)
+        self.thumbs.want(want)
+
+    def show_thumb(self, path, img, folder_size):
+        if not (it := self.rows.get(path)):
+            return  # from a folder no longer shown
+        it.setData(1, Qt.UserRole, True)  # loaded: scrolling past again asks for nothing
+        if img:
+            it.setIcon(0, QIcon(QPixmap.fromImage(img)))
+        if folder_size is not None:
+            it.setText(1, size(folder_size))
 
     def _work(self, fn, then=None):
         """Copies and deletes run off the UI thread: big ISOs over USB take a while."""
