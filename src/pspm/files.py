@@ -8,7 +8,7 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from mutagen.id3 import ID3
+from mutagen.id3 import ID3, ID3NoHeaderError
 
 from . import theme
 from .device import Device
@@ -20,13 +20,12 @@ SECTOR = 2048
 @dataclass(frozen=True)
 class Entry:
     name: str
-    size: int
+    size: int | None         # None for folders: adding one up means walking it, see size_of()
     is_dir: bool
     title: str = ""          # from PARAM.SFO (saves, EBOOT.PBP, ISO/CSO), else ""
-    icon: str | bytes = ""   # thumbnail: an image file's path, or image data taken out of the item, else ""
 
 
-def _size(p: Path) -> int:
+def size_of(p: Path) -> int:
     return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.is_dir() else p.stat().st_size
 
 
@@ -100,7 +99,8 @@ def _iso_file(read, *path: str) -> bytes:
     return read(lba * SECTOR, size)
 
 
-def _iso(p: Path) -> tuple[dict, bytes]:
+def _iso(p: Path, name: str) -> bytes:
+    """PSP_GAME/<name> inside an ISO or CSO."""
     with p.open("rb") as f:
         if p.suffix.lower() == ".cso":
             read = _cso(f)
@@ -108,43 +108,60 @@ def _iso(p: Path) -> tuple[dict, bytes]:
             def read(off, n):
                 f.seek(off)
                 return f.read(n)
-        info = _iso_file(read, "PSP_GAME", "PARAM.SFO")
-        return (sfo(info) if info else {}), _iso_file(read, "PSP_GAME", "ICON0.PNG")
+        return _iso_file(read, "PSP_GAME", name)
 
 
-def _look(p: Path) -> tuple[dict, str | bytes]:
-    """PARAM.SFO and thumbnail of a folder or file, from what's already in it."""
+def _info(p: Path) -> dict:
+    """PARAM.SFO of a save/game folder, EBOOT.PBP or ISO/CSO: small reads, so titles come with the listing."""
+    ext = p.suffix.lower()
+    if p.is_dir():
+        if (p / "PARAM.SFO").is_file():
+            return sfo((p / "PARAM.SFO").read_bytes())
+        return _pbp(p / "EBOOT.PBP")[0] if (p / "EBOOT.PBP").is_file() else {}
+    if ext == ".pbp":
+        return _pbp(p)[0]
+    if ext in (".iso", ".cso"):
+        return sfo(_iso(p, "PARAM.SFO"))
+    return {}
+
+
+def thumb(p: Path) -> str | bytes:
+    """Thumbnail of a folder or file, from what's already in it: an image file's path, image data, or ""."""
     ext = p.suffix.lower()
     if p.is_dir():
         if (p / "PARAM.SFO").is_file():
             icon = p / "ICON0.PNG"
-            return sfo((p / "PARAM.SFO").read_bytes()), str(icon) if icon.is_file() else ""
+            return str(icon) if icon.is_file() else ""
         if (p / "EBOOT.PBP").is_file():
-            return _pbp(p / "EBOOT.PBP")
+            return _pbp(p / "EBOOT.PBP")[1]
         pics = sorted(c for c in p.iterdir() if c.suffix.lower() in IMAGES and c.is_file())  # album covers, ICON0.PNG
-        return {}, str(pics[0]) if pics else ""
+        return str(pics[0]) if pics else ""
     if ext in IMAGES:
-        return {}, str(p)
+        return str(p)
     if ext == ".pbp":
-        return _pbp(p)
+        return _pbp(p)[1]
     if ext in (".iso", ".cso"):
-        return _iso(p)
+        return _iso(p, "ICON0.PNG")
     if ext == ".mp3":
-        art = ID3(p).getall("APIC")
-        return {}, art[0].data if art else b""
+        try:
+            art = ID3(p).getall("APIC")
+        except ID3NoHeaderError:  # untagged
+            return ""
+        return art[0].data if art else b""
     if ext in (".ptf", ".ctf"):
         typ, data = theme.read_ptf(p.read_bytes())[1].get((0, 1), (0, b""))  # the theme's 300x170 preview
-        return {}, data if typ in theme.FORMATS else b""
+        return data if typ in theme.FORMATS else b""
     thm = next((t for t in (p.with_suffix(".THM"), p.with_suffix(".thm")) if t.is_file()), None)  # PSP video thumbnail
-    return {}, str(thm) if thm else ""
+    return str(thm) if thm else ""
 
 
 def _entry(p: Path) -> Entry:
     try:
-        info, icon = _look(p)
-    except Exception:  # noqa: BLE001 - a broken save/ISO/tag shouldn't hide the item, it just gets no thumbnail
-        info, icon = {}, ""
-    return Entry(p.name, _size(p), p.is_dir(), _title(info), icon)
+        info = _info(p)
+    except Exception:  # noqa: BLE001 - a broken save/ISO shouldn't hide the item, it just gets no title
+        info = {}
+    is_dir = p.is_dir()
+    return Entry(p.name, None if is_dir else p.stat().st_size, is_dir, _title(info))
 
 
 def _inside(dev: Device, label: str, name) -> Path:
@@ -167,6 +184,7 @@ def tabs(dev: Device, label: str, prefix: str) -> list[str]:
 
 
 def list_items(dev: Device, label: str, sub: str = "", skip=()) -> list[Entry]:
+    """Names, titles and file sizes only; thumbnails (thumb) and folder sizes (size_of) are for the rows on screen."""
     d = _dir(dev, label, sub)
     if not d.is_dir():
         return []

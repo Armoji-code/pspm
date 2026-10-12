@@ -318,3 +318,23 @@ def test_setup_page_installs_missing(tmp_path, monkeypatch):
     p.job.wait()
     app.processEvents()
     assert got and p.status.text() == "EVERYTHING INSTALLED" and not p.btn.isEnabled()
+
+
+def test_files_page_loads_thumbnails_in_background(tmp_path):
+    from pspm import device
+    from pspm.features.files import FilesPage
+
+    cfg = config.load(tmp_path / "x")
+    save = tmp_path / "PSP" / "SAVEDATA" / "ULUS1"
+    save.mkdir(parents=True)
+    (save / "ICON0.PNG").write_bytes((Path(__file__).parents[1] / "docs" / "screenshot.png").read_bytes())
+    app = QApplication.instance() or QApplication([])
+    p = FilesPage(cfg)
+    p.cats.setCurrentRow(list(cfg["device"]["folders"]).index("saves"))
+    p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
+    it = p.items.topLevelItem(0)
+    assert it.icon(0).isNull() and it.text(1) == ""  # nothing read on the UI thread
+    p.load_visible()
+    p.thumbs.pool.waitForDone()
+    app.processEvents()
+    assert not it.icon(0).isNull() and it.text(1).endswith("KB")
