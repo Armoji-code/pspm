@@ -250,6 +250,39 @@ def test_files_page_tabs_and_double_click(tmp_path):
     assert names() == ["MGS/"]
 
 
+def test_files_page_merges_isos_and_drops(tmp_path):
+    from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PySide6.QtGui import QDropEvent
+
+    from pspm import device
+    from pspm.features.files import FilesPage
+
+    cfg = config.load(tmp_path / "x")
+    psp, pc = tmp_path / "psp", tmp_path / "pc"
+    (psp / "PSP" / "GAME" / "CAT_RPG").mkdir(parents=True)
+    (psp / "ISO" / "CAT_PSP").mkdir(parents=True)
+    (psp / "ISO" / "Loose.iso").write_bytes(b"x")
+    pc.mkdir()
+    (pc / "New.cso").write_bytes(b"x")
+    app = QApplication.instance() or QApplication([])
+    p = FilesPage(cfg)
+    p.set_device(device.Device(psp, cfg["device"]["folders"]))
+    names = lambda: [p.items.topLevelItem(i).text(0) for i in range(p.items.topLevelItemCount())]
+    assert [p.tabs.tabText(i) for i in range(p.tabs.count())] == ["uncategorized", "PSP", "RPG"]
+    assert names() == ["Loose.iso"]
+
+    def drop(target, url):
+        m = QMimeData()
+        m.setUrls([QUrl.fromLocalFile(str(url))])
+        target.dropEvent(QDropEvent(QPointF(-5, -5), Qt.CopyAction, m, Qt.LeftButton, Qt.NoModifier))
+        p.job.wait()
+        app.processEvents()
+
+    drop(p.items, pc / "New.cso")  # from the PC: an ISO type, so it goes to ISO/, not PSP/GAME
+    assert (psp / "ISO" / "New.cso").is_file() and names() == ["Loose.iso", "New.cso"]
+    assert Path(p.items.mimeData([p.items.topLevelItem(0)]).urls()[0].toLocalFile()) == psp / "ISO" / "Loose.iso"
+
+
 def test_setup_page_installs_missing(tmp_path, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
 

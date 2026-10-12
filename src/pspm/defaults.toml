@@ -34,6 +34,14 @@ games = "CAT_"
 isos = "CAT_"
 music = ""
 
+# Categories that also show other categories' folders, merged into the same tabs (PSP ISOs next to homebrew/minis).
+[files.merge]
+games = ["isos"]
+
+# File types that belong in a category: a file dropped or added in a merged view goes to the first that lists it.
+[files.types]
+isos = [".iso", ".cso"]
+
 # MP3 tagger. Lookups use MusicBrainz + Cover Art Archive: free, no account or key.
 [tagger]
 musicbrainz_url = "https://musicbrainz.org/ws/2"
