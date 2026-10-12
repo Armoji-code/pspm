@@ -46,6 +46,7 @@ isos = [".iso", ".cso"]
 [tagger]
 musicbrainz_url = "https://musicbrainz.org/ws/2"
 coverart_url = "https://coverartarchive.org"
+itunes_url = "https://itunes.apple.com/search"  # cover fallback when the Cover Art Archive has none (free, no key)
 user_agent = "PSPM/0.1 (https://github.com/Armoji-code/pspm)"  # MusicBrainz requires an identifying agent
 request_gap_seconds = 1.0  # MusicBrainz allows 1 request per second
 retries = 3                # on "busy" (HTTP 503/429), wait (Retry-After, else 1, 2, 4 s) and try again

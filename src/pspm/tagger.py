@@ -10,6 +10,7 @@ import urllib.request
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from mutagen import MutagenError
 from mutagen.id3 import APIC, ID3, TALB, TCON, TIT2, TPE1, ID3NoHeaderError
 from PIL import Image
 
@@ -89,13 +90,22 @@ class Lookup:
             )
         return None
 
-    def cover(self, release_id: str) -> bytes | None:
-        """Front cover as a PSP-safe JPEG (baseline, max cover_size px), or None if the release has none."""
+    def cover(self, t: Track) -> bytes | None:
+        """Front cover as a PSP-safe JPEG (baseline, max cover_size px): Cover Art Archive for t's release,
+        else the iTunes store's artwork for its artist and title. None if neither has one."""
         try:
-            raw = self._get(f"{self.cfg['coverart_url']}/release/{release_id}/front-500")
+            raw = t.release_id and self._get(f"{self.cfg['coverart_url']}/release/{t.release_id}/front-500")
         except urllib.error.HTTPError:
-            return None  # 404 = no cover; anything else (archive.org is often down): keep the tags, skip the cover
-        return psp_jpeg(raw, self.cfg["cover_size"])
+            raw = None  # 404 = no cover; anything else (archive.org is often down): try iTunes
+        if not raw and (t.artist or t.title):
+            q = urllib.parse.urlencode({"term": f"{t.artist} {t.title}".strip(), "entity": "song", "limit": 1})
+            try:
+                hits = json.loads(self._get(f"{self.cfg['itunes_url']}?{q}")).get("results", [])
+                art = hits and hits[0].get("artworkUrl100", "").replace("100x100", "600x600")
+                raw = art and self._get(art)
+            except urllib.error.HTTPError:
+                raw = None
+        return psp_jpeg(raw, self.cfg["cover_size"]) if raw else None
 
 
 def friendly(e: Exception) -> str:
@@ -120,6 +130,15 @@ def _pick_release(releases: list) -> dict | None:
         return (r.get("status") != "Official", rg.get("primary-type") != "Album", bool(rg.get("secondary-types")))
 
     return min(releases, key=rank) if releases else None
+
+
+def cover_of(path: Path) -> bytes:
+    """The cover image saved in the file, or b"" (also when the file is gone or its tags are broken)."""
+    try:
+        art = _id3(path).getall("APIC")
+    except (OSError, MutagenError):
+        return b""
+    return art[0].data if art else b""
 
 
 def psp_jpeg(data: bytes, size: int) -> bytes:

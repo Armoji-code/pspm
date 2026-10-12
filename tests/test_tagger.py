@@ -1,5 +1,6 @@
 import io
 import json
+from pathlib import Path
 
 import pytest
 from mutagen.id3 import ID3
@@ -124,5 +125,23 @@ def test_get_gives_up_and_cover_is_optional(cfg, monkeypatch):
     with pytest.raises(tagger.urllib.error.HTTPError) as e:
         look._get("http://x")
     assert "busy" in tagger.friendly(e.value)
-    assert look.cover("r") is None  # a missing cover never stops the lookup
+    assert look.cover(tagger.Track(Path("x.mp3"), "Queen", "Song", release_id="r")) is None  # never stops the lookup
     assert "connection" in tagger.friendly(tagger.urllib.error.URLError("dns"))
+
+
+def test_cover_falls_back_to_itunes(cfg, mp3, monkeypatch):
+    urls = []
+
+    def get(self, url):
+        urls.append(url)
+        if "coverartarchive" in url:
+            raise _http(404)
+        if "itunes" in url:
+            return json.dumps({"results": [{"artworkUrl100": "http://art/100x100bb.jpg"}]}).encode()
+        return jpeg(progressive=False)
+
+    monkeypatch.setattr(tagger.Lookup, "_get", get)
+    cover = tagger.Lookup(cfg).cover(tagger.Track(mp3, "Queen", "Bohemian Rhapsody", release_id="r"))
+    assert urls[-1] == "http://art/600x600bb.jpg" and max(Image.open(io.BytesIO(cover)).size) == 500
+    tagger.write(tagger.read(mp3), cover)
+    assert tagger.cover_of(mp3) == cover
