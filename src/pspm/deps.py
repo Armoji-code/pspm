@@ -54,22 +54,32 @@ class NeedPassword(OSError):
         super().__init__(NEED_PASSWORD)
 
 
+def root(cmd: list[str], password: str | None = None) -> subprocess.CompletedProcess:
+    """Run a "pkexec ..." command: pkexec asks in a desktop dialog, or with the password it goes through sudo.
+    Raises NeedPassword when there's no dialog to ask in. Its own session, so pkexec never waits on a terminal."""
+    if password is not None or not shutil.which("pkexec"):
+        if password is None:
+            raise NeedPassword
+        cmd = ["sudo", "-S", "-p", "", *cmd[1:]]
+    r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", check=False, start_new_session=True,
+                       input="" if password is None else password + "\n")
+    if cmd[0] == "pkexec" and r.returncode == 127 and "agent" in r.stderr:
+        raise NeedPassword
+    return r
+
+
 def install(cfg: dict, tools: list[dict], password: str | None = None) -> list[dict]:
     """Run the install commands (pkexec or winget asks for the password or UAC). Opens the download page of the
     tools it can't install, and returns those."""
     cmds, manual = commands(cfg, tools)
     for c in cmds:
-        if c[0] == "pkexec" and (password is not None or not shutil.which("pkexec")):
-            if password is None:
-                raise NeedPassword
-            c = ["sudo", "-S", "-p", "", *c[1:]]
         try:
-            r = subprocess.run(c, capture_output=True, text=True, errors="replace", check=False,
-                               input="" if password is None else password + "\n")
+            r = root(c, password) if c[0] == "pkexec" else subprocess.run(
+                c, capture_output=True, text=True, errors="replace", check=False, stdin=subprocess.DEVNULL)
+        except NeedPassword:
+            raise
         except OSError as e:
             raise OSError(f"couldn't run {c[0]}; install by hand: {shlex.join(c)}") from e
-        if c[0] == "pkexec" and r.returncode == 127 and "agent" in r.stderr:
-            raise NeedPassword
         if r.returncode:
             raise OSError(f"{shlex.join(c)} failed: {(r.stderr or r.stdout).strip()[-300:]}")
     for t in manual:

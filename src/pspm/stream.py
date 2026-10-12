@@ -46,12 +46,20 @@ def remove(dev: Device, cfg: dict) -> None:
     (dev.root / cfg["stream"]["plugin"]).unlink(missing_ok=True)
 
 
-def start(cfg: dict, home: Path | None = None) -> subprocess.Popen:
-    """Open the viewer window. Raises with what's missing on this PC (driver, wine...) instead of failing silently."""
+def start(cfg: dict, home: Path | None = None, password: str | None = None) -> subprocess.Popen:
+    """Open the viewer window. Raises with what's missing on this PC (driver, wine...) or why the viewer quit,
+    instead of failing silently. Raises deps.NeedPassword when the USB rule needs a password and nothing can ask."""
     if gone := deps.missing(cfg, "stream"):
         raise OSError(f"install {', '.join(t['name'] for t in gone)} first, on the SETUP page")
     home = home or tool(cfg)
-    platform.current().stream_ready(home / cfg["stream"]["tool"]["udev_rule"])
+    platform.current().stream_ready(home / cfg["stream"]["tool"]["udev_rule"], password)
     cmd = [a.format(dir=home) for a in cfg["stream"]["run"][platform.name()]]
-    return subprocess.Popen(cmd, cwd=home, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
+    log = home / "viewer.log"
+    with log.open("wb") as out:
+        p = subprocess.Popen(cmd, cwd=home, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
+    try:  # a viewer that can't start (wine, missing dll) quits within seconds; one still running is up
+        code = p.wait(cfg["stream"]["check_seconds"])
+    except subprocess.TimeoutExpired:
+        return p
+    tail = log.read_text(errors="replace").strip().splitlines()[-3:]
+    raise OSError(f"viewer quit ({code}): {' / '.join(tail) or 'no output'} · full log: {log}")
