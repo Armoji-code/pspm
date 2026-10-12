@@ -1,8 +1,10 @@
+import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
@@ -24,7 +26,9 @@ IMAGES = "Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"
 class Ps1Page(QWidget):
     def __init__(self, cfg):
         super().__init__()
-        self.cfg, self.dev, self.job, self.meta = cfg, None, None, {}
+        self.cfg, self.dev, self.job, self.meta, self.editing = cfg, None, None, {}, None
+        self.games = QComboBox()  # NEW GAME, then the converted games on the PSP to edit
+        self.games.activated.connect(self.open)
         self.discs = QListWidget()
         self.game_id = QLineEdit(placeholderText="GAME ID, E.G. SLUS-00594")
         self.title = QLineEdit(placeholderText="TITLE ON THE XMB")
@@ -48,8 +52,11 @@ class Ps1Page(QWidget):
             for col, w in enumerate((self.shown[res], tag, pick, clear)):
                 side.addWidget(w, row, col)
         side.setRowStretch(len(SLOTS) + 2, 1)
+        left = QVBoxLayout()
+        left.addWidget(self.games)
+        left.addWidget(self.discs, 1)
         top = QHBoxLayout()
-        top.addWidget(self.discs, 1)
+        top.addLayout(left, 1)
         top.addLayout(side)
         bar = QHBoxLayout()
         bar.addWidget(self.status, 1)
@@ -57,6 +64,8 @@ class Ps1Page(QWidget):
             b = QPushButton(text)
             b.clicked.connect(fn)
             bar.addWidget(b)
+        self.go = b
+        self.refresh()
         col = QVBoxLayout(self)
         col.addLayout(top, 1)
         col.addLayout(bar)
@@ -66,6 +75,7 @@ class Ps1Page(QWidget):
         self.dev = dev
         if not self._busy():
             self._ready()
+            self.refresh()
 
     def _busy(self):
         return self.job and self.job.isRunning()
@@ -73,6 +83,8 @@ class Ps1Page(QWidget):
     def _ready(self):
         if not self.dev:
             self.status.setText("[NO PSP CONNECTED]")
+        elif self.editing:
+            self.status.setText(f"EDITING {self.games.currentText()} · CHANGE ANYTHING ON THE RIGHT, THEN SAVE".upper())
         elif not self.discs.count():
             self.status.setText("ADD ONE GAME'S DISCS, IN PLAY ORDER")
         else:
@@ -84,6 +96,45 @@ class Ps1Page(QWidget):
         self.job.done.connect(done)
         self.job.failed.connect(lambda e: self.status.setText(f"[ERROR: {e}]".upper()))
         self.job.start()
+
+    def refresh(self):
+        """Fill the game picker with the PS1 games already on the PSP."""
+        self.games.clear()
+        self.games.addItem("NEW GAME FROM DISCS")
+        if self.dev and not self._busy():
+            games = self.dev.path("games")
+            self._run("LOOKING FOR CONVERTED GAMES…", lambda: ps1.installed(games), self._listed)
+
+    def _listed(self, pbps):
+        for pbp in pbps:
+            self._show(pbp)
+        self._ready()
+
+    def _show(self, pbp):
+        """Add the game to the picker, or rename it there after a save."""
+        i = next((i for i in range(self.games.count()) if self.games.itemData(i) == pbp), None)
+        if i is None:
+            self.games.addItem("", pbp)
+            i = self.games.count() - 1
+        self.games.setItemText(i, f"{ps1.title(pbp) or pbp.parent.name} · {pbp.parent.name}")
+
+    def open(self, i):
+        """Load the picked game's title and artwork for editing, or go back to converting."""
+        pbp = self.games.itemData(i)
+        if self._busy() or pbp == self.editing:
+            return
+        self.clear(keep=i)
+        if pbp:
+            self._run("READING THE GAME…", lambda: ps1.read(pbp), lambda meta: self._opened(pbp, meta))
+
+    def _opened(self, pbp, meta):
+        self.editing = pbp
+        self.title.setText(meta["title"])
+        gid = pbp.parent.name.upper()
+        self.game_id.setText(f"{gid[:4]}-{gid[4:]}" if re.fullmatch(r"[A-Z]{4}\d{5}", gid) else gid)
+        for res in SLOTS:
+            self.set_res(res, meta.get(res))
+        self._ready()
 
     def set_res(self, res, data):
         self.meta[res] = data
@@ -108,6 +159,8 @@ class Ps1Page(QWidget):
         got, _ = QFileDialog.getOpenFileNames(self, "PS1 disc images", "", f"PS1 discs ({' '.join(ps1.IMAGES)})")
         if not got:
             return
+        if self.editing:
+            self.clear()
         first = not self.discs.count()
         self.discs.addItems(sorted(got))  # "Disc 1", "Disc 2"... sort into play order
         self._ready()
@@ -131,7 +184,11 @@ class Ps1Page(QWidget):
         none = f" · NONE ONLINE: {', '.join(missing)}" if missing else ""
         self.status.setText(f"FOUND {meta['title']}{none}".upper())
 
-    def clear(self):
+    def clear(self, keep=0):
+        self.editing = None
+        self.games.setCurrentIndex(keep)
+        self.discs.setEnabled(not keep)
+        self.go.setText("SAVE" if keep else "CONVERT")
         self.discs.clear()
         self.game_id.clear()
         self.title.clear()
@@ -140,6 +197,11 @@ class Ps1Page(QWidget):
         self._ready()
 
     def convert(self):
+        if self.editing and self.dev and not self._busy():
+            pbp = self.editing
+            meta = {k: v or b"" for k, v in self.meta.items()} | {"title": self.title.text().strip()}  # CLEAR empties
+            self._run("SAVING TO THE PSP…", lambda: ps1.edit(pbp, meta), lambda _: self._done(pbp.parent))
+            return
         if not (self.dev and self.discs.count()) or self._busy():
             return
         discs = [Path(self.discs.item(i).text()) for i in range(self.discs.count())]
@@ -150,8 +212,9 @@ class Ps1Page(QWidget):
 
     def _done(self, dest):
         self.clear()
+        self._show(dest / "EBOOT.PBP")
         name = ps1.title(dest / "EBOOT.PBP") or dest.name
-        self.status.setText(f"INSTALLED {name} TO {self.cfg['device']['folders']['games']}/{dest.name}".upper())
+        self.status.setText(f"SAVED {name} TO {self.cfg['device']['folders']['games']}/{dest.name}".upper())
 
 
 class _Feature:
