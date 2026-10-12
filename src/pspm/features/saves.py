@@ -24,6 +24,7 @@ class _Job(QThread):
 
     done = Signal(object)
     failed = Signal(str)
+    step = Signal(str)  # what it's on now, e.g. "3/12 ULUS10041"; emit from the worker, shown after the status
 
     def __init__(self, fn, parent):
         super().__init__(parent)
@@ -83,7 +84,11 @@ class SavesPage(QWidget):
         self.job = _Job(fn, self)
         self.job.done.connect(then)
         self.job.failed.connect(lambda e: self.status.setText(f"[ERROR: {e}]"))
+        self.job.step.connect(lambda t: self.status.setText(f"{msg} {t.upper()}"))
         self.job.start()
+
+    def _say(self, text):
+        self.job.step.emit(text)  # called from the worker thread; the signal hops back to the UI
 
     def set_device(self, dev):
         self.dev = dev
@@ -126,7 +131,7 @@ class SavesPage(QWidget):
         def work():
             with saves.LOCK:  # the cloud backup page syncs too, and writes the same state file
                 self.state = saves.load_state(self.state_file)
-                items = saves.plan(*dirs, self.state["last"], self.state.setdefault("hashes", {}))
+                items = saves.plan(*dirs, self.state["last"], self._say, self.state.setdefault("hashes", {}))
                 saves.save_state(self.state, self.state_file)
                 return items
 
@@ -194,7 +199,7 @@ class SavesPage(QWidget):
         def work():
             with saves.LOCK:
                 self.state = saves.load_state(self.state_file)
-                run = saves.apply(items, *dirs, self.state["last"], self.backups, self.state.setdefault("hashes", {}))
+                run = saves.apply(items, *dirs, self.state["last"], self.backups, self._say, self.state.setdefault("hashes", {}))
                 saves.save_state(self.state, self.state_file)
             return run, sum(i.action in (saves.TO_PC, saves.TO_PSP) for i in items)
 

@@ -95,10 +95,10 @@ def test_plan_shows_descriptions_and_apply_skips_stale_items(tmp_path):
 def test_hash_cache_skips_unchanged_saves(tmp_path, monkeypatch):
     psp, pc, bk, last, cache = tmp_path / "psp", tmp_path / "pc", tmp_path / "bk", {}, {}
     put(psp, "A", b"x")
-    saves.apply(saves.plan(psp, pc, last, cache), psp, pc, last, bk, cache)
+    saves.apply(saves.plan(psp, pc, last, cache=cache), psp, pc, last, bk, cache=cache)
     assert set(cache) == {str(psp / "A"), str(pc / "A")}  # the copy is cached too
     read, real = [], saves.Path.read_bytes
     monkeypatch.setattr(saves.Path, "read_bytes", lambda p: read.append(p) or real(p))
-    assert saves.plan(psp, pc, last, cache)[0].action == saves.SAME and all(p.name == "PARAM.SFO" for p in read)  # no save data re-read
+    assert saves.plan(psp, pc, last, cache=cache)[0].action == saves.SAME and all(p.name == "PARAM.SFO" for p in read)  # no save data re-read
     put(psp, "A", b"played")
-    assert saves.plan(psp, pc, last, cache)[0].action == saves.TO_PC
+    assert saves.plan(psp, pc, last, cache=cache)[0].action == saves.TO_PC

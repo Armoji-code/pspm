@@ -23,8 +23,9 @@ def test_run_uploads_only_new_or_changed(tmp_path):
     (save / "ULUS1" / "DATA.BIN").write_bytes(b"a")
     (save / "ULUS2.pspm-tmp").mkdir()  # a save sync mid-copy
     (save / "ULUS2.pspm-tmp" / "DATA.BIN").write_bytes(b"x")
-    done, p = {}, Fake()
-    assert backup.run(p, backup.scan(tmp_path, [save, tmp_path / "MUSIC"]), done, "PSPM") == 1
+    done, p, said = {}, Fake(), []
+    assert backup.run(p, backup.scan(tmp_path, [save, tmp_path / "MUSIC"]), done, "PSPM", progress=said.append) == 1
+    assert said == ["1/1 PSP/SAVEDATA/ULUS1/DATA.BIN"]
     assert p.got == {"PSPM/PSP/SAVEDATA/ULUS1/DATA.BIN": b"a"}
     assert backup.run(p, backup.scan(tmp_path, [save]), done, "PSPM") == 0
     (save / "ULUS1" / "DATA.BIN").write_bytes(b"bb")

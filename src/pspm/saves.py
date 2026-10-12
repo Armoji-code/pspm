@@ -101,13 +101,14 @@ def ppsspp_dir(cfg: dict, state: dict) -> Path | None:
     return None
 
 
-def plan(psp: Path, pc: Path, last: dict, cache: dict | None = None) -> list[Item]:
+def plan(psp: Path, pc: Path, last: dict, progress=lambda text: None, cache: dict | None = None) -> list[Item]:
     """`cache` (state["hashes"]) is pruned to the folders seen now."""
     seen = {}
     # shortcut: one sync history for all PSPs; a second PSP's saves show as changes (still backed up). Key by PSP if needed.
     names = sorted({p.name for d in (psp, pc) if d.is_dir() for p in d.iterdir() if p.is_dir() and TMP not in p.name})
     out = []
-    for n in names:
+    for i, n in enumerate(names, 1):
+        progress(f"{i}/{len(names)} {n}")
         a, b = digest(psp / n, cache), digest(pc / n, cache)
         ta, tb = newest(psp / n), newest(pc / n)
         conflict = False
@@ -128,11 +129,13 @@ def plan(psp: Path, pc: Path, last: dict, cache: dict | None = None) -> list[Ite
     return out
 
 
-def apply(items: list[Item], psp: Path, pc: Path, last: dict, backups: Path = BACKUPS, cache: dict | None = None) -> Path:
+def apply(items: list[Item], psp: Path, pc: Path, last: dict, backups: Path = BACKUPS,
+          progress=lambda text: None, cache: dict | None = None) -> Path:
     """Run each item's action and record it in `last`. Returns this run's backup folder.
     An item whose folders changed since it was planned is set to SKIP: its plan is stale."""
     run = backups / time.strftime("%Y%m%d-%H%M%S")
-    for it in items:
+    for i, it in enumerate(items, 1):
+        progress(f"{i}/{len(items)} {it.name}")
         if it.action in (TO_PC, TO_PSP) and (digest(psp / it.name, cache), digest(pc / it.name, cache)) != (
             it.psp_hash, it.pc_hash
         ):
