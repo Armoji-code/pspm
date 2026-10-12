@@ -56,7 +56,8 @@ auto_sync = true          # sync on plug-in when nothing conflicts; conflicts al
 windows = ["{documents}/PPSSPP/PSP"]
 linux = ["~/.config/ppsspp/PSP", "~/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP"]
 
-# Cloud backup. Mirrors the folders below to a cloud folder on plug-in, uploading only changed files, and RESTORE
+# Cloud backup. On plug-in or BACK UP NOW, first syncs the PSP with PPSSPP (see [saves]; saves changed on both sides are
+# asked about), then mirrors the folders below to a cloud folder, uploading only changed files. RESTORE
 # downloads that folder back to the stick. Nothing is deleted in the cloud. Sign-in happens in your browser; the token
 # is kept in the OS keyring.
 [backup]

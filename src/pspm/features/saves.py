@@ -39,6 +39,11 @@ def _when(t):
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "—"
 
 
+def side(t, desc):
+    """One side of a save: when it last changed, then the game's own description to compare progress."""
+    return f"{_when(t)}\n{desc}" if desc else _when(t)
+
+
 class SavesPage(QWidget):
     def __init__(self, cfg, state_file=saves.STATE, backups=saves.BACKUPS):
         super().__init__()
@@ -87,8 +92,10 @@ class SavesPage(QWidget):
     def pick(self):
         d = QFileDialog.getExistingDirectory(self, "PPSSPP SAVEDATA folder", self.state.get("ppsspp", ""))
         if d:
-            self.state["ppsspp"] = d
-            saves.save_state(self.state, self.state_file)
+            with saves.LOCK:
+                self.state = saves.load_state(self.state_file)
+                self.state["ppsspp"] = d
+                saves.save_state(self.state, self.state_file)
             self.check()
 
     def check(self, *_, auto=False):
@@ -96,7 +103,12 @@ class SavesPage(QWidget):
         if not dirs:
             self.status.setText("[NO PSP CONNECTED]" if not self.dev else "[PPSSPP NOT FOUND · PICK ITS SAVEDATA FOLDER]")
             return
-        self._run(lambda: saves.plan(*dirs, self.state["last"]), lambda items: self._planned(items, auto), "CHECKING…")
+        def work():
+            with saves.LOCK:  # the cloud backup page syncs too, and writes the same state file
+                self.state = saves.load_state(self.state_file)
+                return saves.plan(*dirs, self.state["last"])
+
+        self._run(work, lambda items: self._planned(items, auto), "CHECKING…")
 
     def _planned(self, items, auto):
         self._show(items)
@@ -114,7 +126,7 @@ class SavesPage(QWidget):
         rows = [i for i in items if i.action != saves.SAME]
         self.table.setRowCount(len(rows))
         for r, it in enumerate(rows):
-            for c, text in enumerate([it.name, _when(it.psp_time), _when(it.pc_time)]):
+            for c, text in enumerate([it.name, side(it.psp_time, it.psp_desc), side(it.pc_time, it.pc_desc)]):
                 self.table.setItem(r, c, QTableWidgetItem(text))
             if it.conflict:
                 box = QComboBox()
@@ -124,6 +136,7 @@ class SavesPage(QWidget):
                 self.table.setCellWidget(r, 3, box)
             else:
                 self.table.setItem(r, 3, QTableWidgetItem(it.action))
+        self.table.resizeRowsToContents()
 
     def sync(self):
         dirs = self._dirs()
@@ -132,8 +145,10 @@ class SavesPage(QWidget):
         items = self.items
 
         def work():
-            run = saves.apply(items, *dirs, self.state["last"], self.backups)
-            saves.save_state(self.state, self.state_file)
+            with saves.LOCK:
+                self.state = saves.load_state(self.state_file)
+                run = saves.apply(items, *dirs, self.state["last"], self.backups)
+                saves.save_state(self.state, self.state_file)
             return run, sum(i.action in (saves.TO_PC, saves.TO_PSP) for i in items)
 
         self._run(work, self._synced, "SYNCING…")

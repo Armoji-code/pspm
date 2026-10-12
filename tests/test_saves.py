@@ -66,3 +66,27 @@ def test_ppsspp_dir(tmp_path, monkeypatch):
     (tmp_path / "PSP").mkdir()
     assert saves.ppsspp_dir(cfg, {}) == tmp_path / "PSP" / "SAVEDATA"
     assert saves.ppsspp_dir(cfg, {"ppsspp": "/picked"}) == saves.Path("/picked")
+
+
+def sfo(**kv):
+    """A minimal PARAM.SFO with string values."""
+    import struct
+    keys = b"".join(k.encode() + b"\0" for k in kv)
+    vals = b"".join(v.encode().ljust(64, b"\0") for v in kv.values())
+    head = struct.pack("<4sIIII", b"\0PSF", 0x101, 20 + 16 * len(kv), 20 + 16 * len(kv) + len(keys), len(kv))
+    ko, ents = 0, b""
+    for i, k in enumerate(kv):
+        ents += struct.pack("<HHIII", ko, 0x0204, 64, 64, 64 * i)
+        ko += len(k) + 1
+    return head + ents + keys + vals
+
+
+def test_plan_shows_descriptions_and_apply_skips_stale_items(tmp_path):
+    psp, pc, bk, last = tmp_path / "psp", tmp_path / "pc", tmp_path / "bk", {}
+    put(psp, "A", b"psp")
+    (psp / "A" / "PARAM.SFO").write_bytes(sfo(SAVEDATA_TITLE="Tetris", SAVEDATA_DETAIL="COMPLETION :\n 1%"))
+    [a] = saves.plan(psp, pc, last)
+    assert (a.psp_desc, a.pc_desc) == ("Tetris · COMPLETION : 1%", "")
+    put(psp, "A", b"psp-played-since")  # changed after the plan: copying it now would act on old information
+    saves.apply([a], psp, pc, last, bk)
+    assert a.action == saves.SKIP and not (pc / "A").exists() and "A" not in last
