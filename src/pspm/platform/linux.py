@@ -59,3 +59,11 @@ def stream_ready(rule: Path) -> None:
     if not UDEV_RULE.exists():  # one password prompt, then the PSP's streaming USB is yours without root
         subprocess.run(["pkexec", "sh", "-c", f'cp "$1" {UDEV_RULE} && udevadm control --reload-rules && udevadm trigger',
                         "sh", str(rule)], check=True)
+
+
+def link_dir(target: Path, link: Path) -> None:
+    link.symlink_to(target, target_is_directory=True)
+
+
+def unlink_dir(link: Path) -> None:
+    link.unlink()

@@ -1,3 +1,5 @@
+import _winapi
+import os
 import subprocess
 import tempfile
 import winreg
@@ -41,3 +43,11 @@ def fs_check(device: str) -> tuple[int, str]:
 
 def stream_ready(rule: Path) -> None:
     pass  # the libusb-win32 driver is checked by deps ([deps.tools] in the config)
+
+
+def link_dir(target: Path, link: Path) -> None:
+    _winapi.CreateJunction(str(target), str(link))  # a junction, unlike a symlink, needs no admin or developer mode
+
+
+def unlink_dir(link: Path) -> None:
+    os.rmdir(link)  # removes the junction only, never the PSP folder behind it
