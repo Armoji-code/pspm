@@ -188,6 +188,7 @@ endpoint = 0x02       # frames to the PSP
 pad_endpoint = 0x81   # the PSP's buttons and stick back to the PC
 timeout_ms = 2000
 max_fps = 30
+captures = 4          # screen captures in flight at once; more = higher FPS when capturing is slow
 quality = 80          # JPEG quality of each frame; the PSP decodes them in hardware
 # Wayland (wlroots: Sway, Hyprland...) capture; -s 0.5 halves the size, -o <output> picks one of several screens.
 # X11 and Windows use Pillow's ImageGrab.
