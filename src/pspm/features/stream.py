@@ -1,15 +1,23 @@
 from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
-from .. import deps, stream
+from .. import cast, deps, stream
 from .saves import _Job
 
-STEPS = """1. WITH THE PSP IN USB MODE, PRESS INSTALL PLUGIN.
+STEPS = """PSP TO PC
+1. WITH THE PSP IN USB MODE, PRESS INSTALL PLUGIN.
 2. LEAVE USB MODE AND RESTART THE PSP. KEEP THE CABLE IN.
 3. PRESS START VIEWER. THE PSP'S SCREEN OPENS IN A WINDOW; YOUR KEYBOARD OR GAMEPAD CONTROLS THE PSP.
 
 FIRST TIME: THE SETUP PAGE INSTALLS WHAT THE VIEWER NEEDS (WINE AND LIBUSB ON LINUX, THE USB DRIVER ON WINDOWS).
-LINUX: THE FIRST START ASKS FOR YOUR PASSWORD ONCE TO ALLOW THE PSP'S USB.
-PC TO PSP ISN'T AVAILABLE: NO MAINTAINED TOOL FOR IT EXISTS."""
+LINUX: THE FIRST START ASKS FOR YOUR PASSWORD ONCE TO ALLOW THE PSP'S USB."""
+
+CAST_STEPS = """PC TO PSP
+1. WITH THE PSP IN USB MODE, PRESS INSTALL PSP APP.
+2. LEAVE USB MODE, KEEP THE CABLE IN, AND START PSPM SCREEN ON THE PSP.
+3. PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; HOME ON THE PSP QUITS.
+
+REMOTEJOYLITE BLOCKS THIS WHILE IT'S ON FOR GAMES: REMOVE PLUGIN AND RESTART THE PSP FIRST.
+LINUX: WAYLAND NEEDS GRIM (SWAY, HYPRLAND...; THE SETUP PAGE INSTALLS IT)."""
 
 
 class StreamPage(QWidget):
@@ -26,10 +34,23 @@ class StreamPage(QWidget):
             b = QPushButton(text)
             b.clicked.connect(fn)
             bar.addWidget(b)
+        self.cast_job, self.sending = None, False
+        self.cast_status = QLabel()
+        self.cast_status.setObjectName("label")
+        cast_bar = QHBoxLayout()
+        cast_bar.addWidget(self.cast_status, 1)
+        for text, fn in [("INSTALL PSP APP", self.install_app), ("START SENDING", self.send),
+                         ("STOP SENDING", self.stop_sending)]:
+            b = QPushButton(text)
+            b.clicked.connect(fn)
+            cast_bar.addWidget(b)
         col = QVBoxLayout(self)
         col.addWidget(steps)
-        col.addStretch(1)
         col.addLayout(bar)
+        col.addSpacing(24)
+        col.addWidget(QLabel(CAST_STEPS, wordWrap=True))
+        col.addLayout(cast_bar)
+        col.addStretch(1)
         self.set_device(None)
 
     def set_device(self, dev):
@@ -40,6 +61,9 @@ class StreamPage(QWidget):
             self.status.setText("NO PSP CONNECTED · PLUGIN ALREADY INSTALLED? PRESS START VIEWER")
         else:
             self.status.setText("PLUGIN INSTALLED" if stream.installed(dev, self.cfg) else "PLUGIN NOT INSTALLED")
+        if not (self.cast_job and self.cast_job.isRunning()):
+            self.cast_status.setText("PSP IN USB MODE · " + ("PSP APP INSTALLED" if cast.installed(dev, self.cfg)
+                                     else "PSP APP NOT INSTALLED") if dev else "NOT SENDING")
 
     def _run(self, fn, msg, then, failed=None):
         if self.job and self.job.isRunning():
@@ -77,6 +101,42 @@ class StreamPage(QWidget):
                 return self.start(pw)
             e = "cancelled"
         self._failed(e)
+
+
+    def install_app(self):
+        if self.dev and not (self.cast_job and self.cast_job.isRunning()):
+            dev = self.dev
+            self._cast(lambda: cast.install_app(dev, self.cfg), "INSTALLING…",
+                       lambda _: self.cast_status.setText("PSP APP INSTALLED · LEAVE USB MODE, START PSPM SCREEN"))
+
+    def send(self, password=None):
+        if self.cast_job and self.cast_job.isRunning():
+            return
+        self.sending = True
+        self._cast(lambda: cast.send(self.cfg, lambda: not self.sending,
+                                     lambda n: self.cast_job.step.emit(f"SENDING · {n} FPS"), password),
+                   "CONNECTING TO THE PSP…", lambda _: self.cast_status.setText("STOPPED"))
+
+    def stop_sending(self):
+        self.sending = False
+
+    def _cast(self, fn, msg, then):
+        self.cast_status.setText(msg)
+        self.cast_job = job = _Job(fn, self)
+        job.done.connect(then)
+        job.step.connect(self.cast_status.setText)
+        job.failed.connect(self._cast_failed)
+        job.start()
+
+    def _cast_failed(self, e):
+        if e == deps.NEED_PASSWORD:  # same USB rule as START VIEWER, asked here when no desktop dialog can
+            pw, ok = QInputDialog.getText(self, "Streaming", "Your password, once, to allow the PSP's USB (sudo):",
+                                          QLineEdit.Password)
+            if ok:
+                self.cast_job.wait()
+                return self.send(pw)
+            e = "cancelled"
+        self.cast_status.setText(f"[ERROR: {e}]".upper())
 
 
 class _Feature:

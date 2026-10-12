@@ -10,3 +10,9 @@ psp/pspm_info/*.elf
 psp/pspm_info/*.prx
 psp/pspm_info/*.SFO
 psp/pspm_info/EBOOT.PBP
+psp/pspm_screen/**/*.o
+psp/pspm_screen/**/*.elf
+psp/pspm_screen/**/*.prx
+psp/pspm_screen/*.SFO
+psp/pspm_screen/*.S
+psp/pspm_screen/EBOOT.PBP

@@ -146,7 +146,7 @@ exe = "psxpackager-linux-x64/psxpackager"
 
 # Screen streaming, PSP to PC, with RemoteJoyLite (github.com/Kethen/RemoteJoyLite): a plugin on the PSP sends the
 # screen over the USB cable to a viewer window on the PC, which also passes your keyboard or gamepad to the PSP.
-# Downloaded on first use and checked by sha256. Needs custom firmware. PC to PSP isn't offered: no maintained tool exists.
+# Downloaded on first use and checked by sha256. Needs custom firmware. PC to PSP is [cast] below.
 [stream]
 plugin = "SEPLUGINS/RemoteJoyLite.prx"
 check_seconds = 5  # START VIEWER waits this long for the viewer to fail before calling it started
@@ -172,6 +172,21 @@ timeout_seconds = 120
 [stream.run]
 windows = ["{dir}/x64/RemoteJoyLite_EN_64.exe"]
 linux = ["bash", "{dir}/x64_linux/start_linux_EN.sh"]
+
+# Screen streaming, PC to PSP: PSPM Screen (PSPM's own PSP app, psp/pspm_screen) shows frames PSPM sends over USB.
+[cast]
+app_folder = "PSP/GAME/PSPM_SCREEN"
+vendor = 0x054C
+product = 0x01C9      # PSPLink's "Type B", so RemoteJoyLite's Windows driver (Zadig) and the udev rule cover it
+bcd_device = 0x0200   # tells PSPM Screen apart from RemoteJoyLite (0x0100) on the same ID
+endpoint = 0x02
+timeout_ms = 2000
+max_fps = 30
+# Linux: lets you, not just root, open the PSP's USB (same file and line as RemoteJoyLite's)
+udev_rule = 'SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="01c9", MODE="0660", TAG+="uaccess"'
+# Wayland (wlroots: Sway, Hyprland...) capture; -s 0.5 halves the size, -o <output> picks one of several screens.
+# X11 and Windows use Pillow's ImageGrab.
+wayland_capture = ["grim", "-s", "0.5", "-t", "ppm", "-"]
 
 # Softmod: copies the official ARK custom firmware release to the memory stick, downloaded and checked by sha256.
 # PSPM never writes the PSP's flash. You install ARK on the PSP by running the copied app; until you also install a
@@ -255,6 +270,12 @@ check = { linux = "lib:usb-0.1", windows = "path:%SystemRoot%/System32/drivers/l
 packages = { pacman = ["libusb-compat"], apt = ["libusb-0.1-4"], dnf = ["libusb-compat-0.1"], zypper = ["libusb-0_1-4"] }
 url = "https://zadig.akeo.ie"
 note = "Windows: with the streaming plugin running on the PSP, open Zadig, pick PSP Type B, install libusb-win32"
+
+[deps.tools.grim]
+name = "grim"
+features = ["stream"]       # captures the screen on Wayland for PC to PSP
+check = { linux = "cmd:grim" }
+packages = { pacman = ["grim"], apt = ["grim"], dnf = ["grim"], zypper = ["grim"] }
 
 [deps.tools.dotnet]
 name = ".NET 8 runtime"

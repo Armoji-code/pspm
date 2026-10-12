@@ -7,7 +7,7 @@ name = "pspm"
 dynamic = ["version"]
 description = "Manager and companion app for the Sony PSP"
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.6", "psutil>=5.9", "platformdirs>=4", "mutagen>=1.47", "Pillow>=10", "keyring>=24"]
+dependencies = ["PySide6>=6.6", "psutil>=5.9", "platformdirs>=4", "mutagen>=1.47", "Pillow>=10", "keyring>=24", "pyusb>=1.2"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "pyinstaller>=6"]
@@ -26,7 +26,7 @@ pspm = "pspm.__main__:main"
 version = { attr = "pspm.__version__" }
 
 [tool.setuptools.package-data]
-pspm = ["*.toml", "psp_app/EBOOT.PBP"]
+pspm = ["*.toml", "psp_app/EBOOT.PBP", "psp_app/screen/*"]
 
 [tool.ruff]
 line-length = 120

@@ -45,10 +45,19 @@ jobs:
       - run: make -C psp/pspm_info
       # The app ships prebuilt in src/pspm/psp_app so source installs have it; flag a stale copy.
       - run: cmp psp/pspm_info/EBOOT.PBP src/pspm/psp_app/EBOOT.PBP || echo "::warning::src/pspm/psp_app/EBOOT.PBP differs from a fresh build; copy it over if main.c changed"
+      - run: make -C psp/pspm_screen
+      - run: |
+          cmp psp/pspm_screen/EBOOT.PBP src/pspm/psp_app/screen/EBOOT.PBP && cmp psp/pspm_screen/driver/pspm_usb.prx src/pspm/psp_app/screen/pspm_usb.prx || echo "::warning::src/pspm/psp_app/screen differs from a fresh build of psp/pspm_screen; copy it over if the C files changed"
       - uses: actions/upload-artifact@v4
         with:
           name: pspm-info-eboot
           path: psp/pspm_info/EBOOT.PBP
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pspm-screen
+          path: |
+            psp/pspm_screen/EBOOT.PBP
+            psp/pspm_screen/driver/pspm_usb.prx
 
   build:
     needs: [test, psp-app]
