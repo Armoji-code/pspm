@@ -95,7 +95,7 @@ def test_slow_capture_runs_in_parallel(tmp_path, monkeypatch):
 
     cfg = config.load(tmp_path / "x")
     cfg["cast"] |= {"max_fps": 1000, "captures": 4}
-    sent = []
+    sent, busy, most = [], [], []
 
     class Psp:
         def write(self, ep, data, timeout):
@@ -107,7 +107,10 @@ def test_slow_capture_runs_in_parallel(tmp_path, monkeypatch):
             raise usb.core.USBTimeoutError("timeout")
 
     def capture(c):
+        busy.append(1)
+        most.append(len(busy))
         time.sleep(0.1)  # like grim
+        busy.pop()
         return Image.new("RGB", (64, 36))
 
     class Input:
@@ -126,6 +129,5 @@ def test_slow_capture_runs_in_parallel(tmp_path, monkeypatch):
     monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
     monkeypatch.setattr(platform.current(), "capture", capture, raising=False)
     monkeypatch.setattr(platform.current(), "Input", Input)
-    t = time.monotonic()
     cast.send(cfg, lambda: len(sent) >= 12, m={"buttons": {}, "stick": "pad"})
-    assert time.monotonic() - t < 0.8  # one at a time would take 1.2 s
+    assert len(sent) >= 12 and max(most) == 4  # four grabs at once, not one after another
