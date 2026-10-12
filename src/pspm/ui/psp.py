@@ -1,4 +1,4 @@
-"""A PSP-1000 (psp.svg): click a button or the stick to pick what it does on the PC; pressed buttons light up."""
+"""A silver PSP-1000 (psp.svg, traced from the image the user picked): click a button or the stick to pick what it does on the PC; pressed buttons light up."""
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
@@ -11,11 +11,11 @@ from ..controls import BUTTONS
 SVG = Path(__file__).with_name("psp.svg")
 W, H = 600, 270  # the SVG's units; scaled to the widget
 # control -> (x, y, w, h) over the drawing; round ones light up as circles
-SPOTS = {"l": (40, 5, 100, 14), "r": (460, 5, 100, 14),
-         "up": (60, 64, 20, 26), "down": (60, 94, 20, 26), "left": (42, 82, 26, 20), "right": (72, 82, 26, 20),
-         "stick": (49, 163, 34, 34),
-         "triangle": (518, 60, 24, 24), "cross": (518, 100, 24, 24), "square": (498, 80, 24, 24),
-         "circle": (538, 80, 24, 24), "select": (388, 236, 30, 10), "start": (428, 236, 30, 10)}
+SPOTS = {"l": (38, 8, 68, 22), "r": (494, 8, 68, 22),
+         "up": (60, 81, 28, 30), "down": (60, 135, 28, 30), "left": (32, 109, 30, 28), "right": (86, 109, 30, 28),
+         "stick": (55, 184, 38, 38),
+         "triangle": (514, 75, 30, 30), "cross": (514, 141, 30, 30), "square": (481, 108, 30, 30),
+         "circle": (547, 108, 30, 30), "select": (412, 239, 32, 16), "start": (450, 239, 32, 16)}
 ROUND = {"stick", "triangle", "cross", "square", "circle"}
 SYMBOLS = {"triangle": "△", "cross": "✕", "square": "□", "circle": "○", "up": "▲", "down": "▼", "left": "◀",
            "right": "▶", "l": "L", "r": "R", "select": "SELECT", "start": "START", "stick": ""}
@@ -65,8 +65,8 @@ class PspView(QWidget):
         self.svg.render(p, QRectF(0, 0, W, H))
         c = {k: QColor(v) for k, v in self.c.items()}
         p.setFont(QFont("Space Mono", 9))
-        p.setPen(QColor("#8d8f94"))
-        p.drawText(QRectF(138, 36, 324, 184), Qt.AlignCenter, "CLICK A BUTTON\nTO CHOOSE WHAT IT DOES")
+        p.setPen(QColor("#d8d8d8"))
+        p.drawText(QRectF(137, 30, 328, 190), Qt.AlignCenter, "CLICK A BUTTON\nTO CHOOSE WHAT IT DOES")
         for name, r in SPOTS.items():
             on, hover = bool(self.pressed & BUTTONS.get(name, 0)), name == self.hover
             if not (on or hover):
@@ -83,4 +83,4 @@ class PspView(QWidget):
         if max(abs(x - 128), abs(y - 128)) > 24:
             p.setPen(Qt.NoPen)
             p.setBrush(c["accent"])
-            p.drawEllipse(QPointF(66 + (x - 128) / 10, 180 + (y - 128) / 10), 4, 4)
+            p.drawEllipse(QPointF(74 + (x - 128) / 10, 203 + (y - 128) / 10), 4, 4)

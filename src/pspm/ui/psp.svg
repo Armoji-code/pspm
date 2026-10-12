@@ -1,120 +1,128 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 270">
-  <!-- PSP-1000 front, drawn for PSPM. Same units as SPOTS in psp.py. -->
+  <!-- PSP-1000 front (silver), traced for PSPM. Same units as SPOTS in psp.py. -->
   <defs>
     <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3a3b3f"/>
-      <stop offset="0.12" stop-color="#1d1e21"/>
-      <stop offset="0.85" stop-color="#121214"/>
-      <stop offset="1" stop-color="#050506"/>
+      <stop offset="0" stop-color="#e2e2e2"/>
+      <stop offset="0.5" stop-color="#cfcfcf"/>
+      <stop offset="1" stop-color="#bdbdbd"/>
     </linearGradient>
-    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#9a9ca2"/>
-      <stop offset="0.5" stop-color="#4b4d52"/>
-      <stop offset="1" stop-color="#8a8c92"/>
+    <linearGradient id="lcd" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6e6e6e"/>
+      <stop offset="1" stop-color="#4a4a4a"/>
     </linearGradient>
-    <linearGradient id="shoulder" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5a5c61"/>
-      <stop offset="1" stop-color="#26272a"/>
+    <linearGradient id="well" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#bdbdbd"/>
+      <stop offset="1" stop-color="#e6e6e6"/>
     </linearGradient>
-    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#202124"/>
-      <stop offset="0.4" stop-color="#0b0b0c"/>
-      <stop offset="1" stop-color="#050505"/>
-    </linearGradient>
-    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
-      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
-      <stop offset="0.46" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <radialGradient id="well" cx="0.5" cy="0.4" r="0.6">
-      <stop offset="0.75" stop-color="#0c0c0d"/>
-      <stop offset="1" stop-color="#26272a"/>
-    </radialGradient>
     <radialGradient id="key" cx="0.4" cy="0.3" r="0.8">
-      <stop offset="0" stop-color="#4a4b50"/>
-      <stop offset="1" stop-color="#18191b"/>
+      <stop offset="0" stop-color="#5c5c5c"/>
+      <stop offset="0.6" stop-color="#1a1a1a"/>
+      <stop offset="1" stop-color="#000"/>
     </radialGradient>
-    <radialGradient id="nub" cx="0.4" cy="0.35" r="0.7">
-      <stop offset="0" stop-color="#6b6d72"/>
-      <stop offset="0.7" stop-color="#3a3b3f"/>
-      <stop offset="1" stop-color="#1c1d1f"/>
+    <radialGradient id="nub" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#8a8a8a"/>
+      <stop offset="1" stop-color="#555"/>
     </radialGradient>
   </defs>
 
-  <!-- shoulder buttons, behind the body -->
-  <path d="M30 22 Q34 4 70 4 H140 V22 Z" fill="url(#shoulder)" stroke="#111" stroke-width="1"/>
-  <path d="M570 22 Q566 4 530 4 H460 V22 Z" fill="url(#shoulder)" stroke="#111" stroke-width="1"/>
+  <!-- body, shoulder buttons and the top edge -->
+  <path d="M70 7 H530 C555 7 592 50 592 135 C592 220 555 263 530 263 H70 C45 263 8 220 8 135 C8 50 45 7 70 7 Z" fill="url(#body)"/>
+  <g fill="#f4f4f4" stroke="#555" stroke-width="1.2" stroke-linejoin="round">
+    <path d="M106 7 H70 C56.2 7 38.9 20 26 45.9 L38 52 Q66 26 102 26 Z"/>
+    <path d="M494 7 H530 C543.8 7 561.1 20 574 45.9 L562 52 Q534 26 498 26 Z"/>
+    <path d="M104 244 L98 263 H70 C60 263 52 258 46 252 L52 244 Z"/>
+  </g>
+  <g stroke="#b0b0b0" stroke-width="1">
+    <path d="M108 12 H492 M106 18 H494"/>
+  </g>
+  <path d="M70 7 H530 C555 7 592 50 592 135 C592 220 555 263 530 263 H70 C45 263 8 220 8 135 C8 50 45 7 70 7 Z" fill="none" stroke="#4a4a4a" stroke-width="2"/>
+  <path d="M70 7 H530 C555 7 592 50 592 135 C592 220 555 263 530 263 H70 C45 263 8 220 8 135 C8 50 45 7 70 7 Z" fill="none" stroke="#fff" stroke-width="1" transform="translate(300 135) scale(0.985) translate(-300 -135)"/>
 
-  <!-- body -->
-  <rect x="8" y="14" width="584" height="252" rx="118" fill="url(#rim)"/>
-  <rect x="11" y="17" width="578" height="246" rx="115" fill="url(#body)"/>
+  <!-- screen -->
+  <rect x="134" y="27" width="334" height="196" rx="2" fill="#2a2a2a"/>
+  <rect x="137" y="30" width="328" height="190" fill="url(#lcd)"/>
 
-  <!-- screen glass and LCD -->
-  <rect x="126" y="24" width="348" height="208" rx="6" fill="url(#glass)" stroke="#2c2d31" stroke-width="1"/>
-  <rect x="138" y="36" width="324" height="184" fill="#000"/>
-  <rect x="126" y="24" width="348" height="208" rx="6" fill="url(#shine)"/>
-  <text x="140" y="31" font-family="Arial, Helvetica, sans-serif" font-size="6" font-weight="bold" fill="#8d8f94">SONY</text>
+  <!-- PlayStation logo, SONY -->
+  <g fill="#222">
+    <path d="M47 38 L51 39.5 V55 L47 53.5 Z M51 39.5 C61 41 61 50 54 49 V46 C56.5 46 56.5 42.5 51 42 Z"/>
+    <path d="M47 50 V52 L42 53.5 L47 54 V55.5 C42 55.5 37 54.5 38 53 C39 51.5 44 50.5 47 50 Z"/>
+    <path d="M51 51.5 L59 49 C62 49.5 62 51.5 59.5 52.5 L51 55.5 V53.5 L57 51.4 L51 52.8 Z"/>
+  </g>  <text x="510" y="47" text-anchor="middle" font-family="Times New Roman, serif" font-size="13" font-weight="bold" fill="#f6f6f6" stroke="#8a8a8a" stroke-width="0.6" letter-spacing="1">SONY</text>
 
   <!-- d-pad -->
-  <circle cx="70" cy="92" r="38" fill="url(#well)"/>
-  <g fill="url(#key)" stroke="#000" stroke-width="0.8">
-    <path d="M60 64 h20 v16 l-10 10 l-10 -10 Z"/>
-    <path d="M60 120 h20 v-16 l-10 -10 l-10 10 Z"/>
-    <path d="M42 82 v20 h16 l10 -10 l-10 -10 Z"/>
-    <path d="M98 82 v20 h-16 l-10 -10 l10 -10 Z"/>
+  <circle cx="74" cy="123" r="46" fill="url(#well)" stroke="#444" stroke-width="1.5"/>
+  <g fill="url(#key)" stroke="#000" stroke-width="0.6">
+    <path d="M60 81 h28 v18 l-14 12 l-14 -12 Z" />
+    <path d="M60 165 h28 v-18 l-14 -12 l-14 12 Z"/>
+    <path d="M32 109 v28 h18 l12 -14 l-12 -14 Z"/>
+    <path d="M116 109 v28 h-18 l-12 -14 l12 -14 Z"/>
   </g>
-  <g fill="#8d8f94">
-    <path d="M70 68 l4 6 h-8 Z"/>
-    <path d="M70 116 l4 -6 h-8 Z"/>
-    <path d="M46 92 l6 -4 v8 Z"/>
-    <path d="M94 92 l-6 -4 v8 Z"/>
+  <g fill="#fff">
+    <path d="M74 89 l5 6 h-10 Z"/>
+    <path d="M74 157 l5 -6 h-10 Z"/>
+    <path d="M40 123 l6 -5 v10 Z"/>
+    <path d="M108 123 l-6 -5 v10 Z"/>
   </g>
 
-  <!-- analog nub -->
-  <rect x="44" y="158" width="44" height="44" rx="12" fill="url(#well)"/>
-  <circle cx="66" cy="180" r="17" fill="url(#nub)" stroke="#0a0a0b" stroke-width="1"/>
-  <circle cx="66" cy="180" r="11" fill="none" stroke="#2a2b2e" stroke-width="1"/>
+  <!-- analog stick -->
+  <circle cx="74" cy="203" r="19" fill="url(#nub)" stroke="#333" stroke-width="1.5"/>
 
-  <!-- home -->
-  <rect x="40" y="226" width="34" height="11" rx="5.5" fill="url(#key)" stroke="#000" stroke-width="0.8"/>
-  <text x="57" y="234" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="6" fill="#8d8f94">HOME</text>
+  <!-- status lights, power and hold -->
+  <g font-family="Arial, Helvetica, sans-serif" font-size="6">
+    <circle cx="23" cy="186" r="1.6" fill="#e0b000"/>
+    <rect x="30" y="183" width="10" height="6" rx="1" fill="none" stroke="#777"/>
+    <circle cx="27" cy="213" r="1.6" fill="#2fb7b0"/>
+    <path d="M34 216 l4 -7 l4 4 l3 -3 v6 Z" fill="#888"/>
+    <text x="548" y="188" fill="#2fb7b0">POWER</text>
+    <circle cx="577" cy="186" r="1.6" fill="#2fb7b0"/>
+    <text x="548" y="215" fill="#888">HOLD</text>
+    <circle cx="570" cy="213" r="1.6" fill="#e0b000"/>
+  </g>
 
   <!-- face buttons -->
-  <circle cx="530" cy="92" r="42" fill="url(#well)"/>
-  <g fill="url(#key)" stroke="#000" stroke-width="0.8">
-    <circle cx="530" cy="72" r="12"/>
-    <circle cx="530" cy="112" r="12"/>
-    <circle cx="510" cy="92" r="12"/>
-    <circle cx="550" cy="92" r="12"/>
+  <rect x="495" y="89" width="68" height="68" rx="16" transform="rotate(45 529 123)" fill="url(#well)" stroke="#444" stroke-width="1.5"/>
+  <g fill="url(#key)" stroke="#000" stroke-width="0.6">
+    <circle cx="529" cy="90" r="15"/>
+    <circle cx="529" cy="156" r="15"/>
+    <circle cx="496" cy="123" r="15"/>
+    <circle cx="562" cy="123" r="15"/>
   </g>
-  <g fill="none" stroke-width="1.6">
-    <path d="M530 66 l6 10 h-12 Z" stroke="#3fbf9a"/>
-    <path d="M525 107 l10 10 M535 107 l-10 10" stroke="#7aa8e8"/>
-    <rect x="505" y="87" width="10" height="10" stroke="#e48ac0"/>
-    <circle cx="550" cy="92" r="5.5" stroke="#ff5a5a"/>
+  <g fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M529 83 l6 11 h-12 Z"/>
+    <path d="M524 151 l10 10 M534 151 l-10 10"/>
+    <rect x="491" y="117" width="10" height="12"/>
+    <circle cx="562" cy="123" r="6"/>
   </g>
 
-  <!-- bottom strip: volume, display, sound, select, start -->
-  <g fill="url(#key)" stroke="#000" stroke-width="0.8">
-    <rect x="184" y="238" width="22" height="8" rx="4"/>
-    <rect x="212" y="238" width="22" height="8" rx="4"/>
-    <rect x="258" y="238" width="22" height="8" rx="4"/>
-    <rect x="286" y="238" width="22" height="8" rx="4"/>
-    <rect x="388" y="236" width="30" height="10" rx="5"/>
-    <rect x="428" y="236" width="30" height="10" rx="5"/>
+  <!-- bottom row: home, volume, PSP, display, sound, select, start -->
+  <g font-family="Arial, Helvetica, sans-serif" font-size="6" text-anchor="middle">
+    <text x="136" y="250" fill="#888">HOME</text>
+    <g fill="url(#key)" stroke="#000" stroke-width="0.6">
+      <rect x="170" y="240" width="20" height="13" rx="6.5"/>
+      <rect x="208" y="240" width="20" height="13" rx="6.5"/>
+      <circle cx="365" cy="247" r="6.5"/>
+      <circle cx="391" cy="247" r="6.5"/>
+      <path d="M412 239 H444 V244 Q444 255 428 255 Q412 255 412 244 Z"/>
+      <path d="M450 239 H482 V244 Q482 255 466 255 Q450 255 450 244 Z"/>
+    </g>
+    <g stroke="#fff" stroke-width="1.4" fill="none">
+      <path d="M176 246.5 h8"/>
+      <path d="M214 246.5 h8 M218 242.5 v8"/>
+      <rect x="361" y="244" width="8" height="6" rx="1"/>
+      <path d="M392 243 v7 M392 243 l2 1.5 M392 250 a1.5 1.5 0 1 1 -1 -1"/>
+    </g>
+    <text x="428" y="248" fill="#fff" font-size="5">SELECT</text>
+    <text x="466" y="248" fill="#fff" font-size="5">START</text>
   </g>
-  <g font-family="Arial, Helvetica, sans-serif" font-size="5" fill="#8d8f94" text-anchor="middle">
-    <text x="195" y="254">−</text>
-    <text x="223" y="254">+</text>
-    <text x="209" y="254">VOL</text>
-    <text x="403" y="255">SELECT</text>
-    <text x="443" y="255">START</text>
+  <!-- PSP logo -->
+  <g fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="miter">
+    <path d="M266 254 V242 H288 V248 H270"/>
+    <path d="M316 242 H294 V248 H314 V254 H292"/>
+    <path d="M320 254 V242 H342 V248 H324"/>
   </g>
-  <!-- speaker -->
-  <g fill="#050506">
-    <circle cx="520" cy="190" r="1.4"/><circle cx="526" cy="190" r="1.4"/><circle cx="532" cy="190" r="1.4"/>
-    <circle cx="523" cy="195" r="1.4"/><circle cx="529" cy="195" r="1.4"/>
-    <circle cx="520" cy="200" r="1.4"/><circle cx="526" cy="200" r="1.4"/><circle cx="532" cy="200" r="1.4"/>
+  <g fill="none" stroke="#999" stroke-width="0.6">
+    <path d="M266 254 V242 H288 V248 H270"/>
+    <path d="M316 242 H294 V248 H314 V254 H292"/>
+    <path d="M320 254 V242 H342 V248 H324"/>
   </g>
-  <text x="530" y="222" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9" font-style="italic" font-weight="bold" fill="#5b5d62">PSP</text>
 </svg>
