@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from ..controls import BUTTONS
@@ -26,7 +26,7 @@ class PspView(QWidget):
     def __init__(self, colors: dict):
         super().__init__()
         self.c, self.pressed, self.stick, self.hover = colors, 0, (128, 128), None
-        self.image = QPixmap(str(IMAGE))
+        self.image = QImage(str(IMAGE))  # not QPixmap: one alive after QApplication crashes at exit
         self.setMouseTracking(True)
         self.setMinimumSize(W * 2 // 3, H * 2 // 3)
         self.setCursor(Qt.PointingHandCursor)
@@ -62,7 +62,7 @@ class PspView(QWidget):
         p.translate(ox, oy)
         p.scale(s, s)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
-        p.drawPixmap(QRectF(0, -1, 600, 272), self.image, QRectF(self.image.rect()))
+        p.drawImage(QRectF(0, -1, 600, 272), self.image)
         c = {k: QColor(v) for k, v in self.c.items()}
         p.setFont(QFont("Space Mono", 9))
         p.setPen(QColor("#d8d8d8"))
