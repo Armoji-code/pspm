@@ -4,11 +4,14 @@ Each save folder (e.g. ULUS10041DATA00) is copied whole. The content hash from t
 decides the direction: the side that changed since then wins. If both changed, or there is no
 history yet, it's a conflict for the user, with the newest side suggested. Overwritten folders
 are moved to a backup first and deletions are never synced, so no save is lost silently.
+Plan, apply and the state file are shared by the PPSSPP SAVES and CLOUD BACKUP pages: hold LOCK.
 """
 import hashlib
 import json
 import os
 import shutil
+import struct
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,11 +19,13 @@ from pathlib import Path
 from platformdirs import user_data_path, user_documents_path
 
 from . import platform
+from .files import sfo
 
 STATE = user_data_path("pspm") / "saves.json"
 BACKUPS = user_data_path("pspm") / "save-backups"
 TO_PC, TO_PSP, SAME, SKIP = "PSP → PC", "PC → PSP", "SAME", "SKIP"
 TMP = ".pspm-tmp"
+LOCK = threading.Lock()
 
 
 @dataclass
@@ -32,6 +37,8 @@ class Item:
     pc_time: float
     action: str
     conflict: bool = False
+    psp_desc: str = ""  # the game's own text from PARAM.SFO, e.g. "COMPLETION : 1%"
+    pc_desc: str = ""
 
 
 def digest(folder: Path) -> str:
@@ -43,6 +50,15 @@ def digest(folder: Path) -> str:
         data = p.read_bytes()
         h.update(f"{p.relative_to(folder).as_posix()}\0{len(data)}\0".encode() + data)
     return h.hexdigest()
+
+
+def describe(folder: Path) -> str:
+    """The save's title and detail text, as the PSP's save menu shows them."""
+    try:
+        info = sfo((folder / "PARAM.SFO").read_bytes())
+    except (OSError, struct.error, ValueError):  # missing or broken: just no description
+        return ""
+    return " · ".join(" ".join(str(info.get(k, "")).split()) for k in ("SAVEDATA_TITLE", "SAVEDATA_DETAIL") if info.get(k))
 
 
 def newest(folder: Path) -> float:
@@ -86,14 +102,17 @@ def plan(psp: Path, pc: Path, last: dict) -> list[Item]:
             action = TO_PSP
         else:
             action, conflict = (TO_PC if ta >= tb else TO_PSP), True
-        out.append(Item(n, a, b, ta, tb, action, conflict))
+        out.append(Item(n, a, b, ta, tb, action, conflict, describe(psp / n), describe(pc / n)))
     return out
 
 
 def apply(items: list[Item], psp: Path, pc: Path, last: dict, backups: Path = BACKUPS) -> Path:
-    """Run each item's action and record it in `last`. Returns this run's backup folder."""
+    """Run each item's action and record it in `last`. Returns this run's backup folder.
+    An item whose folders changed since it was planned is set to SKIP: its plan is stale."""
     run = backups / time.strftime("%Y%m%d-%H%M%S")
     for it in items:
+        if it.action in (TO_PC, TO_PSP) and (digest(psp / it.name), digest(pc / it.name)) != (it.psp_hash, it.pc_hash):
+            it.action = SKIP
         if it.action == TO_PC:
             _copy(psp / it.name, pc / it.name, run / "pc")
         elif it.action == TO_PSP:

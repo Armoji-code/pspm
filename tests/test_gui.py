@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -77,11 +78,18 @@ def test_backup_page_backs_up_on_plug_in(tmp_path, monkeypatch):
     (tmp_path / "psp" / "PSP" / "SAVEDATA" / "ULUS1").mkdir(parents=True)
     (tmp_path / "psp" / "PSP" / "SAVEDATA" / "ULUS1" / "DATA.BIN").write_bytes(b"save")
     app = QApplication.instance() or QApplication([])
-    p = BackupPage(cfg, tmp_path / "b.json", tmp_path / "old")
+    # Synced first (each side gets the other's save), then uploaded: PPSSPP's save reaches the cloud via the stick.
+    (tmp_path / "ppsspp" / "ULUS2").mkdir(parents=True)
+    (tmp_path / "ppsspp" / "ULUS2" / "DATA.BIN").write_bytes(b"emu")
+    (tmp_path / "s.json").write_text(json.dumps({"ppsspp": str(tmp_path / "ppsspp"), "last": {}}))
+    p = BackupPage(cfg, tmp_path / "b.json", tmp_path / "old", tmp_path / "s.json", tmp_path / "sbk")
     p.set_device(device.Device(tmp_path / "psp", cfg["device"]["folders"]))
-    p.job.wait()
-    app.processEvents()
-    assert got == {"PSPM/PSP/SAVEDATA/ULUS1/DATA.BIN": b"save"} and p.status.text() == "BACKED UP 1 FILES"
+    for _ in range(2):  # sync check, then the upload
+        p.job.wait()
+        app.processEvents()
+    assert p.status.text() == "SYNCED 2 SAVES · BACKED UP 2 FILES", p.status.text()
+    assert got == {"PSPM/PSP/SAVEDATA/ULUS1/DATA.BIN": b"save", "PSPM/PSP/SAVEDATA/ULUS2/DATA.BIN": b"emu"}
+    assert (tmp_path / "ppsspp" / "ULUS1" / "DATA.BIN").read_bytes() == b"save"
     p.restore()
     p.job.wait()
     app.processEvents()
