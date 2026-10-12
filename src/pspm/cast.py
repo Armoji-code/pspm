@@ -4,6 +4,7 @@ import io
 import struct
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from importlib.resources import files
 from pathlib import Path
@@ -99,18 +100,21 @@ def send(cfg: dict, stop, fps=lambda n, ms: None, password: str | None = None, m
 
     gap, t0 = 1 / c["max_fps"], time.monotonic()
     try:
-        with ThreadPoolExecutor(1) as pool:
-            nxt = pool.submit(grab)
+        # several captures in flight: grim takes ~200 ms a frame, so one at a time caps at ~5 FPS
+        with ThreadPoolExecutor(c["captures"]) as pool:
+            todo = deque(pool.submit(grab) for _ in range(c["captures"]))
             while not stop():
                 t = time.monotonic()
-                img, nxt = nxt.result(), pool.submit(grab)  # capture the next frame while this one goes out
+                img = todo.popleft().result()
+                todo.append(pool.submit(grab))
                 psp.write(c["endpoint"], frame(img, c["quality"]), c["timeout_ms"])
                 if t - t0 >= 1:
                     fps(len(took), round(1000 * sum(took) / max(1, len(took))))
                     took.clear()
                     t0 = t
                 time.sleep(max(0.0, gap - (time.monotonic() - t)))
-            nxt.result()
+            for f in todo:
+                f.result()
     finally:
         ended.set()
         pad.join()

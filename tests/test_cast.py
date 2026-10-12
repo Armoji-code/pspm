@@ -88,3 +88,44 @@ def test_install_app_into_category_moves_old_copy(tmp_path):
     dest = cast.install_app(dev, cfg, "CAT_Tools")
     assert dest == dev.path("games") / "CAT_Tools" / "PSPM_SCREEN" and cast.installed(dev, cfg)
     assert not (dev.path("games") / "PSPM_SCREEN").exists()
+
+
+def test_slow_capture_runs_in_parallel(tmp_path, monkeypatch):
+    import time
+
+    cfg = config.load(tmp_path / "x")
+    cfg["cast"] |= {"max_fps": 1000, "captures": 4}
+    sent = []
+
+    class Psp:
+        def write(self, ep, data, timeout):
+            sent.append(data)
+
+        def read(self, ep, size, timeout):
+            import usb.core
+
+            raise usb.core.USBTimeoutError("timeout")
+
+    def capture(c):
+        time.sleep(0.1)  # like grim
+        return Image.new("RGB", (64, 36))
+
+    class Input:
+        def __init__(self, name):
+            pass
+
+        def key(self, t, down):
+            pass
+
+        def stick(self, x, y):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
+    monkeypatch.setattr(platform.current(), "capture", capture, raising=False)
+    monkeypatch.setattr(platform.current(), "Input", Input)
+    t = time.monotonic()
+    cast.send(cfg, lambda: len(sent) >= 12, m={"buttons": {}, "stick": "pad"})
+    assert time.monotonic() - t < 0.8  # one at a time would take 1.2 s
