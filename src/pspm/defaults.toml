@@ -116,6 +116,17 @@ version = "1.6.3"
 compression = 5            # 0-9; higher is smaller and slower to convert
 timeout_seconds = 120
 
+# Title and artwork found online by game ID (SLUS-00594...). {serial} is the game ID, {name} the Redump name the
+# title list gives. GameDB-PSX (github.com/niemasd/GameDB-PSX) has the titles; libretro-thumbnails has the pictures.
+# Leave a picture empty ("") to not look it up. No public source has XMB music (SND0.AT3), so that one is picked by hand.
+[ps1.online]
+timeout_seconds = 20
+title = "https://raw.githubusercontent.com/niemasd/GameDB-PSX/main/games/{serial}/title.txt"
+name = "https://raw.githubusercontent.com/niemasd/GameDB-PSX/main/games/{serial}/release_name.txt"
+icon0 = "https://raw.githubusercontent.com/libretro-thumbnails/Sony_-_PlayStation/master/Named_Boxarts/{name}.png"
+pic0 = "https://raw.githubusercontent.com/libretro-thumbnails/Sony_-_PlayStation/master/Named_Titles/{name}.png"
+pic1 = "https://raw.githubusercontent.com/libretro-thumbnails/Sony_-_PlayStation/master/Named_Snaps/{name}.png"
+
 [ps1.tool.windows]          # needs the .NET 8 runtime (Windows offers to install it on first run)
 url = "https://github.com/RupertAvery/PSXPackager/releases/download/v1.6.3/psxpackager-win-x64.zip"
 sha256 = "3aaabe6009461c13bec85cfc441cf30dac6314867297a0bfd9b4b0257c8ced83"
