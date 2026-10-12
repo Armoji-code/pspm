@@ -1,3 +1,5 @@
+import io
+import random
 import struct
 
 import pytest
@@ -6,11 +8,18 @@ from PIL import Image
 from pspm import cast, config, device, platform
 
 
-def test_frame_is_header_then_letterboxed_5650():
-    data = cast.frame(Image.new("RGB", (48, 48), (255, 128, 8)))  # square: black bars left and right
-    assert data[:512] == cast.HEADER and len(data) == 512 + 480 * 272 * 2 and len(data) % 512 == 0
-    px = struct.unpack(f"<{480 * 272}H", data[512:])
-    assert px[136 * 480 + 240] == 31 | 32 << 5 | 1 << 11 and px[0] == 0
+def test_frame_is_header_then_letterboxed_jpeg():
+    data = cast.frame(Image.new("RGB", (48, 48), (255, 128, 8)), 80)  # square: black bars left and right
+    size = struct.unpack_from("<I", data, 8)[0]
+    assert data[:8] == b"PSPMSCR2" and len(data) % 512 == 0 and 512 + size <= len(data) < 1024 + size
+    pic = Image.open(io.BytesIO(data[512:512 + size]))
+    assert pic.size == (480, 272) and pic.format == "JPEG" and not pic.info.get("progressive")
+    assert pic.getpixel((0, 0)) == (0, 0, 0) and abs(pic.getpixel((240, 136))[0] - 255) < 8
+
+
+def test_busy_frame_drops_quality_to_fit_the_psp():
+    noise = Image.frombytes("RGB", (480, 272), random.Random(1).randbytes(480 * 272 * 3))
+    assert struct.unpack_from("<I", cast.frame(noise, 100), 8)[0] <= cast.MAX_JPEG
 
 
 def test_install_app_copies_eboot_and_driver(tmp_path):
@@ -21,31 +30,55 @@ def test_install_app_copies_eboot_and_driver(tmp_path):
     assert cast.installed(dev, cfg) and (dest / "EBOOT.PBP").read_bytes()[:4] == b"\0PBP"
 
 
-def test_send_writes_frames_until_stopped(tmp_path, monkeypatch):
+def test_send_writes_frames_and_maps_psp_buttons_until_stopped(tmp_path, monkeypatch):
     cfg = config.load(tmp_path / "x")
     cfg["cast"]["max_fps"] = 1000
-    sent = []
+    sent, did, seen = [], [], []
+    pad = [b"PSPMPAD1" + struct.pack("<IBB", 0x4000, 128, 128), b"PSPMPAD1" + struct.pack("<IBB", 0, 128, 128)]
 
     class Psp:
         def write(self, ep, data, timeout):
             sent.append((ep, data[:8]))
 
+        def read(self, ep, size, timeout):
+            import usb.core
+
+            if not pad:
+                raise usb.core.USBTimeoutError("timeout")
+            return pad.pop(0)
+
+    class Input:
+        def __init__(self, name):
+            pass
+
+        def key(self, t, down):
+            did.append((t, down))
+
+        def stick(self, x, y):
+            pass
+
+        def close(self):
+            did.append("closed")
+
     monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
     monkeypatch.setattr(platform.current(), "capture", lambda c: Image.new("RGB", (640, 480)), raising=False)
-    cast.send(cfg, lambda: len(sent) >= 3)
-    assert sent == [(cfg["cast"]["endpoint"], b"PSPMSCR1")] * 3
+    monkeypatch.setattr(platform.current(), "Input", Input)
+    m = {"buttons": {"cross": "space"}, "stick": "pad"}
+    cast.send(cfg, lambda: len(sent) >= 3 and not pad, pressed=lambda *s: seen.append(s), m=m)
+    assert sent[:3] == [(cfg["cast"]["endpoint"], b"PSPMSCR2")] * 3
+    assert did == [("space", True), ("space", False), "closed"] and seen == [(0x4000, 128, 128), (0, 128, 128)]
 
 
 def test_open_says_how_to_start_the_psp_app(tmp_path, monkeypatch):
     import usb.core
 
     cfg = config.load(tmp_path / "x")
-    monkeypatch.setattr(cast.tools, "ROOT", tmp_path)
+    monkeypatch.setattr(cast.stream.tools, "ROOT", tmp_path)
     monkeypatch.setattr(platform.current(), "stream_ready", lambda rule, pw: None)
     monkeypatch.setattr(usb.core, "find", lambda **kw: None)
     with pytest.raises(OSError, match="PSPM SCREEN"):
         cast.open_psp(cfg)
-    assert "01c9" in (tmp_path / "60-psp-b-usb.rules").read_text()
+    assert "01c9" in (tmp_path / "60-psp-b-usb.rules").read_text() and "uinput" in (tmp_path / "60-psp-b-usb.rules").read_text()
 
 
 def test_install_app_into_category_moves_old_copy(tmp_path):

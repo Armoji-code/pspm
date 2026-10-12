@@ -89,7 +89,7 @@ The plugin and viewer are [RemoteJoyLite](https://github.com/Kethen/RemoteJoyLit
 
 ### PC to PSP
 
-Shows the PC's screen on the PSP, over the same cable, with PSPM's own PSP app, PSPM Screen.
+Shows the PC's screen on the PSP, over the same cable, with PSPM's own PSP app, PSPM Screen. The PSP's buttons and stick control the PC.
 
 1. With the PSP in USB mode, press INSTALL PSP APP. It copies `EBOOT.PBP` and its USB driver `pspm_usb.prx` to `PSP/GAME/PSPM_SCREEN`.
 2. Leave USB mode, keep the cable in, and start PSPM Screen on the PSP.
@@ -98,7 +98,9 @@ Shows the PC's screen on the PSP, over the same cable, with PSPM's own PSP app, 
 - Linux: Wayland needs `grim` (wlroots desktops such as Sway and Hyprland; GNOME and KDE Wayland aren't supported yet); X11 needs nothing. The first start asks for your password once for the same udev rule as the viewer.
 - Windows: uses the same libusb-win32 driver as the viewer (Zadig, *PSP Type B*).
 - RemoteJoyLite blocks other USB drivers while it's on for games: REMOVE PLUGIN and restart the PSP first.
-- Frames go uncompressed (480x272, 16-bit), up to `max_fps` in `[cast]`.
+- Frames are 480x272 JPEGs (`quality` in `[cast]`), decoded by the PSP's hardware, up to `max_fps`. The status shows the frame rate and how long each screen capture takes.
+- Controls: click a button or the stick on the PSP drawing to pick what it does: a key, a mouse button, a gamepad button, or nothing; the stick can be a gamepad stick, the mouse, the arrow keys or WASD. Picks apply at once and are kept in `psp_controls.json` next to `config.toml`. Pressed buttons light up on the drawing. By default the PSP is a gamepad.
+- Linux: the controls are virtual devices made through `/dev/uinput`, which the same udev rule allows (PSPM asks for your password once more if your rule is from an older version). Windows: keys and mouse work; gamepad buttons need a virtual-controller driver and do nothing for now.
 
 ## Softmod (ARK custom firmware)
 

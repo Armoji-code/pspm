@@ -52,7 +52,7 @@ def test_start_checks_pc_then_runs_viewer(tmp_path, monkeypatch):
         stream.start(cfg, home)
     seen["runs"] = True
     assert isinstance(stream.start(cfg, home), Viewer)
-    assert seen["rule"] == home / cfg["stream"]["tool"]["udev_rule"] and seen["cwd"] == home
+    assert "uinput" in seen["rule"].read_text() and seen["cwd"] == home
     assert seen["cmd"][-1].startswith(str(home)) and seen["cmd"][-1].endswith((".exe", ".sh"))
 
 
@@ -68,6 +68,7 @@ def test_usb_rule_never_waits_on_a_terminal(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(c, 127 if c[0] == "pkexec" else 0, "", "No authentication agent found.")
 
     monkeypatch.setattr(subprocess, "run", run)
+    (tmp_path / "r.rules").write_text("rule")
     with pytest.raises(deps.NeedPassword):
         linux.stream_ready(tmp_path / "r.rules")
     linux.stream_ready(tmp_path / "r.rules", "pw")

@@ -3,7 +3,8 @@ TARGET = pspm_screen
 OBJS = main.o pspm_usb.o
 CFLAGS = -O2 -G0 -Wall
 BUILD_PRX = 1
-LIBS = -lpspkubridge -lpsppower
+# psputility comes from the SDK's own list after libc; naming it here splits its stubs and breaks psp-fixup-imports
+LIBS = -lpspkubridge -lpsppower -lpspjpeg
 EXTRA_TARGETS = EBOOT.PBP driver/pspm_usb.prx
 EXTRA_CLEAN = pspm_usb.S
 PSP_EBOOT_TITLE = PSPM Screen

@@ -1,7 +1,20 @@
-from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from .. import cast, deps, stream
+from .. import cast, controls, deps, platform, stream
 from ..ui.category import CategoryPicker
+from ..ui.psp import SYMBOLS, PspView
 from .saves import _Job
 
 STEPS = """PSP TO PC
@@ -15,16 +28,24 @@ LINUX: THE FIRST START ASKS FOR YOUR PASSWORD ONCE TO ALLOW THE PSP'S USB."""
 CAST_STEPS = """PC TO PSP
 1. WITH THE PSP IN USB MODE, PRESS INSTALL PSP APP.
 2. LEAVE USB MODE, KEEP THE CABLE IN, AND START PSPM SCREEN ON THE PSP.
-3. PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; HOME ON THE PSP QUITS.
+3. PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; ITS BUTTONS AND STICK CONTROL THE PC. HOME ON THE PSP QUITS.
 
 REMOTEJOYLITE BLOCKS THIS WHILE IT'S ON FOR GAMES: REMOVE PLUGIN AND RESTART THE PSP FIRST.
-LINUX: WAYLAND NEEDS GRIM (SWAY, HYPRLAND...; THE SETUP PAGE INSTALLS IT)."""
+LINUX: WAYLAND NEEDS GRIM (SWAY, HYPRLAND...; THE SETUP PAGE INSTALLS IT).
+WINDOWS: BUTTONS CAN BE KEYS OR THE MOUSE; GAMEPAD BUTTONS WORK ON LINUX ONLY FOR NOW."""
+
+
+def _name(target):
+    return target.replace("_", " ").upper()
 
 
 class StreamPage(QWidget):
+    pad_state = Signal(int, int, int)  # from the sending thread: what the PSP's buttons and stick are doing
+
     def __init__(self, cfg):
         super().__init__()
         self.cfg, self.dev, self.job = cfg, None, None
+        self.controls = controls.load(cfg)
         steps = QLabel(STEPS, wordWrap=True)
         self.status = QLabel()
         self.status.setObjectName("label")
@@ -53,7 +74,18 @@ class StreamPage(QWidget):
         col.addSpacing(24)
         col.addWidget(QLabel(CAST_STEPS, wordWrap=True))
         col.addLayout(cast_bar)
-        col.addStretch(1)
+        self.psp = PspView(cfg["themes"][cfg["app"]["theme"]])
+        self.psp.picked.connect(self.pick)
+        self.pad_state.connect(self.psp.set_state)
+        self.legend = QGridLayout()
+        self.legend.setHorizontalSpacing(16)
+        self.legend.setRowStretch(7, 1)  # rows at the top
+        pad_row = QHBoxLayout()
+        pad_row.addWidget(self.psp, 1)
+        pad_row.addSpacing(24)
+        pad_row.addLayout(self.legend)
+        col.addLayout(pad_row, 1)
+        self.show_controls()
         self.set_device(None)
 
     def set_device(self, dev):
@@ -118,7 +150,8 @@ class StreamPage(QWidget):
             return
         self.sending = True
         self._cast(lambda: cast.send(self.cfg, lambda: not self.sending,
-                                     lambda n: self.cast_job.step.emit(f"SENDING · {n} FPS"), password),
+                                     lambda n, ms: self.cast_job.step.emit(f"SENDING · {n} FPS · CAPTURE {ms} MS"),
+                                     password, self.controls, self.pad_state.emit),
                    "CONNECTING TO THE PSP…", lambda _: self.cast_status.setText("STOPPED"))
 
     def stop_sending(self):
@@ -141,6 +174,46 @@ class StreamPage(QWidget):
                 return self.send(pw)
             e = "cancelled"
         self.cast_status.setText(f"[ERROR: {e}]".upper())
+
+
+    def show_controls(self):
+        if not self.legend.count():  # first call: one name + target label per control, in two columns
+            for i, n in enumerate([*controls.BUTTONS, "stick"]):
+                sym = SYMBOLS[n] if len(SYMBOLS[n]) == 1 and SYMBOLS[n] != n.upper() else ""
+                name, target = QLabel(f"{sym} {n.upper()}".strip()), QLabel()
+                name.setObjectName("label")
+                target.setObjectName(f"target_{n}")
+                self.legend.addWidget(name, i % 7, i // 7 * 2)
+                self.legend.addWidget(target, i % 7, i // 7 * 2 + 1)
+        for n in [*controls.BUTTONS, "stick"]:
+            target = self.controls["stick"] if n == "stick" else self.controls["buttons"].get(n, "none")
+            self.findChild(QLabel, f"target_{n}").setText(_name(target))
+
+    def pick(self, name, where):
+        """A menu of what the clicked PSP control can do; the pick is saved and used at once, even while sending."""
+        menu = QMenu(self)
+        if name == "stick":
+            groups = {"": [f"stick:{m}" for m in controls.STICK]}
+        else:
+            pad = "GAMEPAD" + ("" if platform.name() == "linux" else " (LINUX ONLY)")
+            keys = controls.KEYS
+            groups = {"KEYBOARD: LETTERS": keys[:26], "KEYBOARD: NUMBERS": keys[26:36], "KEYBOARD: OTHER": keys[36:],
+                      "MOUSE": controls.MOUSE, pad: controls.PAD, "": ["none"]}
+        for title, targets in groups.items():
+            sub = menu.addMenu(title) if title else menu
+            for t in targets:
+                a = QAction(_name(t.removeprefix("stick:")), sub)
+                a.triggered.connect(lambda _=False, t=t: self.assign(name, t))
+                sub.addAction(a)
+        menu.exec(where)
+
+    def assign(self, name, target):
+        if target.startswith("stick:"):
+            self.controls["stick"] = target.removeprefix("stick:")
+        else:
+            self.controls["buttons"][name] = target
+        controls.save(self.controls)
+        self.show_controls()
 
 
 class _Feature:

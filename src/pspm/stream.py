@@ -46,13 +46,21 @@ def remove(dev: Device, cfg: dict) -> None:
     (dev.root / cfg["stream"]["plugin"]).unlink(missing_ok=True)
 
 
+def usb_rule(cfg: dict) -> Path:
+    """The udev rule file for the PSP's USB and the virtual gamepad, for platform.stream_ready to install."""
+    rule = tools.ROOT / "60-psp-b-usb.rules"
+    rule.parent.mkdir(parents=True, exist_ok=True)
+    rule.write_text(cfg["stream"]["udev_rule"].lstrip())
+    return rule
+
+
 def start(cfg: dict, home: Path | None = None, password: str | None = None) -> subprocess.Popen:
     """Open the viewer window. Raises with what's missing on this PC (driver, wine...) or why the viewer quit,
     instead of failing silently. Raises deps.NeedPassword when the USB rule needs a password and nothing can ask."""
     if gone := deps.missing(cfg, "stream"):
         raise OSError(f"install {', '.join(t['name'] for t in gone)} first, on the SETUP page")
     home = home or tool(cfg)
-    platform.current().stream_ready(home / cfg["stream"]["tool"]["udev_rule"], password)
+    platform.current().stream_ready(usb_rule(cfg), password)
     cmd = [a.format(dir=home) for a in cfg["stream"]["run"][platform.name()]]
     log = home / "viewer.log"
     with log.open("wb") as out:
