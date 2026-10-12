@@ -282,11 +282,13 @@ def pending(files: dict[str, Path], done: dict) -> list[str]:
     return [rel for rel, p in sorted(files.items()) if done.get(rel) != _sig(p)]
 
 
-def run(provider: Provider, files: dict[str, Path], done: dict, remote: str, save=lambda: None) -> int:
+def run(provider: Provider, files: dict[str, Path], done: dict, remote: str, save=lambda: None,
+        progress=lambda text: None) -> int:
     """Upload every new or changed file; `done` (rel -> signature) is updated and saved after each one,
     so an unplug mid-backup keeps what already went up."""
     todo = pending(files, done)
-    for rel in todo:
+    for i, rel in enumerate(todo, 1):
+        progress(f"{i}/{len(todo)} {rel}")
         p = files[rel]
         sig = _sig(p)
         with p.open("rb") as f:
@@ -296,11 +298,14 @@ def run(provider: Provider, files: dict[str, Path], done: dict, remote: str, sav
     return len(todo)
 
 
-def restore(provider: Provider, root: Path, remote: str, done: dict, backups: Path = RESTORE_BACKUPS) -> int:
+def restore(provider: Provider, root: Path, remote: str, done: dict, backups: Path = RESTORE_BACKUPS,
+            progress=lambda text: None) -> int:
     """Download every file in `remote` to the same place on the stick. Files that differ are moved to
     a dated folder under `backups` first. Returns how many files changed on the stick."""
     run, n = backups / time.strftime("%Y%m%d-%H%M%S"), 0
-    for rel, (_, ref) in sorted(provider.files(remote).items()):
+    remote_files = sorted(provider.files(remote).items())
+    for i, (rel, (_, ref)) in enumerate(remote_files, 1):
+        progress(f"{i}/{len(remote_files)} {rel}")
         dst = root / rel
         if any(part in ("", ".", "..") for part in rel.split("/")) or not dst.resolve().is_relative_to(root.resolve()):
             raise OSError(f"refusing to restore outside the PSP: {rel}")
