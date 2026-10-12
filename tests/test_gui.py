@@ -280,7 +280,7 @@ def test_files_page_merges_isos_and_drops(tmp_path):
 
     drop(p.items, pc / "New.cso")  # from the PC: an ISO type, so it goes to ISO/, not PSP/GAME
     assert (psp / "ISO" / "New.cso").is_file() and names() == ["Loose.iso", "New.cso"]
-    assert p.items.mimeData([p.items.topLevelItem(0)]).urls()[0].toLocalFile() == str(psp / "ISO" / "Loose.iso")
+    assert Path(p.items.mimeData([p.items.topLevelItem(0)]).urls()[0].toLocalFile()) == psp / "ISO" / "Loose.iso"
 
 
 def test_setup_page_installs_missing(tmp_path, monkeypatch):
