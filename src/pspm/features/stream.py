@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
-from .. import stream
+from .. import deps, stream
 from .saves import _Job
 
 STEPS = """1. WITH THE PSP IN USB MODE, PRESS INSTALL PLUGIN.
@@ -41,14 +41,17 @@ class StreamPage(QWidget):
         else:
             self.status.setText("PLUGIN INSTALLED" if stream.installed(dev, self.cfg) else "PLUGIN NOT INSTALLED")
 
-    def _run(self, fn, msg, then):
+    def _run(self, fn, msg, then, failed=None):
         if self.job and self.job.isRunning():
             return
         self.status.setText(msg)
         self.job = _Job(fn, self)
         self.job.done.connect(lambda _: self.status.setText(then))
-        self.job.failed.connect(lambda e: self.status.setText(f"[ERROR: {e}]".upper()))
+        self.job.failed.connect(failed or self._failed)
         self.job.start()
+
+    def _failed(self, e):
+        self.status.setText(f"[ERROR: {e}]".upper())
 
     def install(self):
         if self.dev:
@@ -61,8 +64,19 @@ class StreamPage(QWidget):
             dev = self.dev
             self._run(lambda: stream.remove(dev, self.cfg), "REMOVING…", "PLUGIN REMOVED · RESTART THE PSP")
 
-    def start(self):
-        self._run(lambda: stream.start(self.cfg), "STARTING VIEWER…", "VIEWER STARTED")
+    def start(self, password=None):
+        self._run(lambda: stream.start(self.cfg, password=password), "STARTING VIEWER…", "VIEWER STARTED",
+                  self._start_failed)
+
+    def _start_failed(self, e):
+        if e == deps.NEED_PASSWORD:  # no polkit agent (SwayFX, i3...): ask here, allow the USB through sudo
+            pw, ok = QInputDialog.getText(self, "Streaming", "Your password, once, to allow the PSP's USB (sudo):",
+                                          QLineEdit.Password)
+            if ok:
+                self.job.wait()
+                return self.start(pw)
+            e = "cancelled"
+        self._failed(e)
 
 
 class _Feature:

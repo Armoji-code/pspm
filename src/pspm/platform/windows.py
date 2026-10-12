@@ -41,7 +41,7 @@ def fs_check(device: str) -> tuple[int, str]:
         return r.returncode, out.read_text(errors="replace") if out.exists() else r.stderr
 
 
-def stream_ready(rule: Path) -> None:
+def stream_ready(rule: Path, password: str | None = None) -> None:
     pass  # the libusb-win32 driver is checked by deps ([deps.tools] in the config)
 
 

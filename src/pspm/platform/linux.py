@@ -54,11 +54,14 @@ def fs_check(device: str) -> tuple[int, str]:
 UDEV_RULE = Path("/etc/udev/rules.d/60-psp-b-usb.rules")
 
 
-def stream_ready(rule: Path) -> None:
+def stream_ready(rule: Path, password: str | None = None) -> None:
     # Wine and libusb 0.1 are checked by deps ([deps.tools] in the config).
     if not UDEV_RULE.exists():  # one password prompt, then the PSP's streaming USB is yours without root
-        subprocess.run(["pkexec", "sh", "-c", f'cp "$1" {UDEV_RULE} && udevadm control --reload-rules && udevadm trigger',
-                        "sh", str(rule)], check=True)
+        from .. import deps  # deps imports platform
+        r = deps.root(["pkexec", "sh", "-c", f'cp "$1" {UDEV_RULE} && udevadm control --reload-rules && udevadm trigger',
+                       "sh", str(rule)], password)
+        if r.returncode:
+            raise OSError(f"couldn't allow the PSP's USB: {(r.stderr or r.stdout).strip()[-300:] or r.returncode}")
 
 
 def link_dir(target: Path, link: Path) -> None:

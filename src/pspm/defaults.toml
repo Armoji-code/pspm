@@ -149,6 +149,7 @@ exe = "psxpackager-linux-x64/psxpackager"
 # Downloaded on first use and checked by sha256. Needs custom firmware. PC to PSP isn't offered: no maintained tool exists.
 [stream]
 plugin = "SEPLUGINS/RemoteJoyLite.prx"
+check_seconds = 5  # START VIEWER waits this long for the viewer to fail before calling it started
 
 # Plugin list on the stick -> lines that load the plugin. PLUGINS.TXT is ARK's; the .txt files are PRO/ME's.
 # shortcut: paths say ms0:, so a PSP Go streams only with the plugin on its memory stick, not internal storage (ef0:).

@@ -35,8 +35,40 @@ def test_start_checks_pc_then_runs_viewer(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="SETUP"):
         stream.start(cfg, home)
     monkeypatch.setattr(deps, "found", lambda check: True)
-    monkeypatch.setattr(platform.current(), "stream_ready", lambda rule: seen.update(rule=rule))
-    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd, cwd=kw["cwd"]))
-    stream.start(cfg, home)
+    monkeypatch.setattr(platform.current(), "stream_ready", lambda rule, pw: seen.update(rule=rule))
+
+    class Viewer:
+        def __init__(self, cmd, **kw):
+            seen.update(cmd=cmd, cwd=kw["cwd"])
+            kw["stdout"].write(b"err:module:import_dll Library libusb0.dll not found\n")
+
+        def wait(self, timeout):
+            if seen.get("runs"):
+                raise subprocess.TimeoutExpired("viewer", timeout)
+            return 1
+
+    monkeypatch.setattr(subprocess, "Popen", Viewer)
+    with pytest.raises(OSError, match="libusb0.dll not found"):  # the viewer's own error, not a silent hang
+        stream.start(cfg, home)
+    seen["runs"] = True
+    assert isinstance(stream.start(cfg, home), Viewer)
     assert seen["rule"] == home / cfg["stream"]["tool"]["udev_rule"] and seen["cwd"] == home
     assert seen["cmd"][-1].startswith(str(home)) and seen["cmd"][-1].endswith((".exe", ".sh"))
+
+
+def test_usb_rule_never_waits_on_a_terminal(tmp_path, monkeypatch):
+    from pspm.platform import linux
+
+    monkeypatch.setattr(linux, "UDEV_RULE", tmp_path / "60-psp-b-usb.rules")
+    monkeypatch.setattr(deps.shutil, "which", lambda m: m == "pkexec")
+    ran = []
+
+    def run(c, **kw):  # pkexec run from a terminal would wait there for the password; its own session can't
+        ran.append((c[0], kw["start_new_session"]))
+        return subprocess.CompletedProcess(c, 127 if c[0] == "pkexec" else 0, "", "No authentication agent found.")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(deps.NeedPassword):
+        linux.stream_ready(tmp_path / "r.rules")
+    linux.stream_ready(tmp_path / "r.rules", "pw")
+    assert ran == [("pkexec", True), ("sudo", True)]
