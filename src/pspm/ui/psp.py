@@ -1,17 +1,20 @@
-"""A PSP drawn in outline: click a button or the stick to pick what it does on the PC; pressed buttons light up."""
+"""A silver PSP-1000 (psp.png, the image the user picked): click a button or the stick to pick what it does on the PC; pressed buttons light up."""
+from pathlib import Path
+
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from ..controls import BUTTONS
 
-W, H = 600, 250  # drawing units; scaled to the widget
-# control -> (x, y, w, h); round ones are drawn as circles
-SPOTS = {"l": (44, 8, 110, 20), "r": (446, 8, 110, 20),
-         "up": (84, 62, 26, 26), "down": (84, 118, 26, 26), "left": (56, 90, 26, 26), "right": (112, 90, 26, 26),
-         "stick": (76, 158, 42, 42),
-         "triangle": (490, 62, 26, 26), "cross": (490, 118, 26, 26), "square": (462, 90, 26, 26),
-         "circle": (518, 90, 26, 26), "select": (436, 186, 50, 16), "start": (500, 186, 50, 16)}
+IMAGE = Path(__file__).with_name("psp.png")  # 300x136, drawn at 2x
+W, H = 600, 270  # drawing units; scaled to the widget
+# control -> (x, y, w, h) over the drawing; round ones light up as circles
+SPOTS = {"l": (38, 8, 68, 22), "r": (494, 8, 68, 22),
+         "up": (60, 81, 28, 30), "down": (60, 135, 28, 30), "left": (32, 109, 30, 28), "right": (86, 109, 30, 28),
+         "stick": (55, 184, 38, 38),
+         "triangle": (514, 75, 30, 30), "cross": (514, 141, 30, 30), "square": (481, 108, 30, 30),
+         "circle": (547, 108, 30, 30), "select": (412, 239, 32, 16), "start": (450, 239, 32, 16)}
 ROUND = {"stick", "triangle", "cross", "square", "circle"}
 SYMBOLS = {"triangle": "△", "cross": "✕", "square": "□", "circle": "○", "up": "▲", "down": "▼", "left": "◀",
            "right": "▶", "l": "L", "r": "R", "select": "SELECT", "start": "START", "stick": ""}
@@ -23,6 +26,7 @@ class PspView(QWidget):
     def __init__(self, colors: dict):
         super().__init__()
         self.c, self.pressed, self.stick, self.hover = colors, 0, (128, 128), None
+        self.image = QImage(str(IMAGE))  # not QPixmap: one alive after QApplication crashes at exit
         self.setMouseTracking(True)
         self.setMinimumSize(W * 2 // 3, H * 2 // 3)
         self.setCursor(Qt.PointingHandCursor)
@@ -57,26 +61,26 @@ class PspView(QWidget):
         s, ox, oy = self._scale()
         p.translate(ox, oy)
         p.scale(s, s)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.drawImage(QRectF(0, -1, 600, 272), self.image)
         c = {k: QColor(v) for k, v in self.c.items()}
-        p.setPen(QPen(c["border"], 1.5))
-        p.setBrush(Qt.NoBrush)
-        p.drawRoundedRect(QRectF(10, 28, 580, 190), 95, 95)  # body
-        p.drawRoundedRect(QRectF(160, 46, 280, 154), 4, 4)  # screen
         p.setFont(QFont("Space Mono", 9))
-        p.setPen(c["text_disabled"])
-        p.drawText(QRectF(160, 46, 280, 154), Qt.AlignCenter, "CLICK A BUTTON\nTO CHOOSE WHAT IT DOES")
+        p.setPen(QColor("#d8d8d8"))
+        p.drawText(QRectF(137, 30, 328, 190), Qt.AlignCenter, "CLICK A BUTTON\nTO CHOOSE WHAT IT DOES")
         for name, r in SPOTS.items():
-            rect = QRectF(*r)
-            on = bool(self.pressed & BUTTONS.get(name, 0))
-            p.setPen(QPen(c["accent"] if on else c["display"] if name == self.hover else c["text_secondary"], 1.5))
-            p.setBrush(c["accent"] if on else Qt.NoBrush)
+            on, hover = bool(self.pressed & BUTTONS.get(name, 0)), name == self.hover
+            if not (on or hover):
+                continue
+            fill = QColor(c["accent"])
+            fill.setAlpha(170)
+            p.setPen(QPen(c["accent"] if on else QColor("#ffffff"), 1.5))
+            p.setBrush(fill if on else Qt.NoBrush)
             if name in ROUND:
-                p.drawEllipse(rect)
+                p.drawEllipse(QRectF(*r))
             else:
-                p.drawRoundedRect(rect, 4, 4)
-            p.setPen(c["bg"] if on else c["text"])
-            p.drawText(rect, Qt.AlignCenter, SYMBOLS[name])
-        x, y = self.stick  # where the PSP's stick is: a dot inside its circle
-        p.setPen(Qt.NoPen)
-        p.setBrush(c["accent"] if max(abs(x - 128), abs(y - 128)) > 24 else c["text_secondary"])
-        p.drawEllipse(QPointF(97 + (x - 128) / 10, 179 + (y - 128) / 10), 4, 4)
+                p.drawRoundedRect(QRectF(*r), 5, 5)
+        x, y = self.stick  # where the PSP's stick is: a dot on the nub
+        if max(abs(x - 128), abs(y - 128)) > 24:
+            p.setPen(Qt.NoPen)
+            p.setBrush(c["accent"])
+            p.drawEllipse(QPointF(74 + (x - 128) / 10, 203 + (y - 128) / 10), 4, 4)

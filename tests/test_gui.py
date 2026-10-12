@@ -421,3 +421,18 @@ def test_stream_page_picks_and_shows_psp_controls(tmp_path, monkeypatch):
     p.pad_state.emit(controls.BUTTONS["cross"], 0, 255)
     QApplication.processEvents()
     assert p.psp.pressed == controls.BUTTONS["cross"] and p.psp.stick == (0, 255)
+
+
+def test_start_sending_button_passes_no_password(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QPushButton
+
+    from pspm import cast
+    from pspm.features.stream import StreamPage
+
+    got = []
+    monkeypatch.setattr(cast, "send", lambda cfg, stop, fps, password, *a: got.append(password))
+    QApplication.instance() or QApplication([])
+    p = StreamPage(config.load(tmp_path / "x"))
+    next(b for b in p.findChildren(QPushButton) if b.text() == "START SENDING").click()
+    p.cast_job.wait()
+    assert got == [None]
