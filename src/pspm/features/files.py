@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QMimeData, QSize, Qt, QUrl
+from PySide6.QtGui import QIcon, QImage, QImageReader, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -18,26 +19,90 @@ from PySide6.QtWidgets import (
 
 from .. import files
 from ..ui.fmt import size
+from .saves import _Job
+
+
+def _icon(src, box: QSize):
+    """Thumbnail from an image file (read scaled down, so big photos stay quick) or image data."""
+    if isinstance(src, bytes):
+        img = QImage.fromData(src)
+    else:
+        r = QImageReader(src)
+        r.setAutoTransform(True)
+        if r.size().isValid():
+            r.setScaledSize(r.size().scaled(box, Qt.KeepAspectRatio))
+        img = r.read()
+    return None if img.isNull() else QIcon(QPixmap.fromImage(img))
+
+
+def _accept(e):
+    e.acceptProposedAction() if e.mimeData().hasUrls() else e.ignore()
+
+
+class _Tree(QTreeWidget):
+    """Drag items out to the PC's file manager (copies); drop files in, or items onto a folder (moves)."""
+
+    def __init__(self, page):
+        super().__init__()
+        self.page = page
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+
+    def supportedDropActions(self):
+        return Qt.CopyAction  # a "move" out would make Qt drop the rows; the files stay either way
+
+    def mimeTypes(self):
+        return ["text/uri-list"]
+
+    def mimeData(self, items):
+        m = QMimeData()
+        m.setUrls([QUrl.fromLocalFile(str(p)) for p in map(self.page.path_of, items) if p])
+        return m
+
+    dragEnterEvent = dragMoveEvent = lambda self, e: _accept(e)
+
+    def dropEvent(self, e):
+        it = self.itemAt(e.position().toPoint())
+        data = it and it.data(0, Qt.UserRole)
+        self.page.drop(e, data[1] if data and data[2] else self.page.sub)
+
+
+class _Tabs(QTabBar):
+    """Drop onto a tab to put files (or move items) into that category folder."""
+
+    def __init__(self, page):
+        super().__init__()
+        self.page = page
+        self.setAcceptDrops(True)
+
+    dragEnterEvent = dragMoveEvent = lambda self, e: _accept(e)
+
+    def dropEvent(self, e):
+        i = self.tabAt(e.position().toPoint())
+        if i >= 0:
+            self.page.drop(e, self.tabData(i) or "")
 
 
 class FilesPage(QWidget):
-    UP = ".."
+    UP = None  # item data of the "../" row; others hold (label, path in label, is_dir)
 
     def __init__(self, cfg):
         super().__init__()
-        self.dev, self.fcfg, self.sub = None, cfg["files"], ""
+        self.dev, self.fcfg, self.sub, self.job = None, cfg["files"], "", None
         self.cats = QListWidget()
         self.cats.addItems(cfg["device"]["folders"].keys())
         self.cats.currentTextChanged.connect(self.open_cat)
-        self.tabs = QTabBar()
+        self.tabs = _Tabs(self)
         self.tabs.setExpanding(False)
         self.tabs.setDrawBase(False)
         self.tabs.currentChanged.connect(self.open_tab)
-        self.items = QTreeWidget()
+        self.items = _Tree(self)
         self.items.setHeaderLabels(["NAME", "SIZE"])
         self.items.setRootIsDecorated(False)
         self.items.setColumnWidth(0, 420)
-        self.items.setIconSize(QSize(72, 40))  # half of a 144x80 ICON0
+        self.items.setIconSize(QSize(90, 50))  # ICON0 is 144x80
         self.items.itemDoubleClicked.connect(self.enter)
         self.status = QLabel()
         self.status.setObjectName("label")
@@ -63,14 +128,19 @@ class FilesPage(QWidget):
     def cat(self):
         return self.cats.currentItem() and self.cats.currentItem().text()
 
+    def labels(self):
+        """The category's own folder, then the folders merged into it."""
+        return [self.cat(), *self.fcfg.get("merge", {}).get(self.cat(), [])]
+
     def set_device(self, dev):
         self.dev = dev
         self.open_cat()
 
     def open_cat(self, *_):
-        """Rebuild the tabs for the category: a plain tab, then one per tab folder."""
+        """Rebuild the tabs for the category: a plain tab, then one per tab folder in any of its folders."""
         prefix = self.fcfg["tabs"].get(self.cat())
-        found = files.tabs(self.dev, self.cat(), prefix) if self.dev and prefix is not None else []
+        found = sorted({t for lb in self.labels() for t in files.tabs(self.dev, lb, prefix)}, key=str.lower) \
+            if self.dev and prefix is not None else []
         self.tabs.blockSignals(True)
         while self.tabs.count():
             self.tabs.removeTab(0)
@@ -86,15 +156,19 @@ class FilesPage(QWidget):
         self.refresh()
 
     def enter(self, item):
-        name = item.data(0, Qt.UserRole)
-        if name == self.UP:
+        data = item.data(0, Qt.UserRole)
+        if data is self.UP:
             up = Path(self.sub).parent.as_posix()
             self.sub = "" if up == "." else up
-        elif name.endswith("/"):
-            self.sub = (Path(self.sub) / name.rstrip("/")).as_posix()
+        elif data[2]:
+            self.sub = data[1]
         else:
             return
         self.refresh()
+
+    def path_of(self, item):
+        data = item.data(0, Qt.UserRole)
+        return data and self.dev and self.dev.path(data[0]) / data[1]
 
     def refresh(self, *_):
         self.items.clear()
@@ -104,39 +178,57 @@ class FilesPage(QWidget):
             return
         top = self.tabs.tabData(self.tabs.currentIndex()) or ""
         if self.sub != top:
-            QTreeWidgetItem(self.items, [self.UP + "/", ""]).setData(0, Qt.UserRole, self.UP)
+            QTreeWidgetItem(self.items, ["../", ""]).setData(0, Qt.UserRole, self.UP)
         hide = () if self.sub else [self.tabs.tabData(i) for i in range(1, self.tabs.count())]
-        for e in files.list_items(self.dev, cat, self.sub, hide):
+        found = [(lb, e) for lb in self.labels() for e in files.list_items(self.dev, lb, self.sub, hide)]
+        # shortcut: thumbnails load as the list is built, fine for a memory stick's worth; move to a thread if slow
+        for lb, e in sorted(found, key=lambda f: ((f[1].title or f[1].name).lower(), f[1].name.lower())):
             it = QTreeWidgetItem(self.items, [(e.title or e.name) + ("/" if e.is_dir else ""), size(e.size)])
-            it.setData(0, Qt.UserRole, e.name + ("/" if e.is_dir else ""))
+            it.setData(0, Qt.UserRole, (lb, (Path(self.sub) / e.name).as_posix(), e.is_dir))
             if e.title:
                 it.setToolTip(0, e.name)
-            if e.icon:
-                it.setIcon(0, QIcon(e.icon))
+            if e.icon and (icon := _icon(e.icon, self.items.iconSize())):
+                it.setIcon(0, icon)
         self.status.setText((self.dev.path(cat) / self.sub).relative_to(self.dev.root).as_posix().upper())
 
-    def _run(self, fn, *args):
-        try:
-            fn(self.dev, self.cat(), *args)
-        except (OSError, ValueError) as e:
-            self.status.setText(f"[ERROR: {e}]")
+    def _work(self, fn, then=None):
+        """Copies and deletes run off the UI thread: big ISOs over USB take a while."""
+        if self.job and self.job.isRunning():
+            self.status.setText("[BUSY: WAIT FOR THE LAST COPY TO FINISH]")
             return
-        self.refresh()
+        self.status.setText("[WORKING…]")
+        self.job = _Job(fn, self)
+        self.job.done.connect(self.refresh)
+        self.job.failed.connect(lambda e: (self.refresh(), self.status.setText(f"[ERROR: {e}]")))
+        self.job.start()
+
+    def place(self, paths, sub, move=False):
+        """Copy (or move, for items from this list) into sub, each into the folder its type belongs in."""
+        groups = {}
+        for p in paths:
+            groups.setdefault(files.route(self.dev, self.labels(), p, self.fcfg.get("types", {})), []).append(p)
+        self._work(lambda: [files.copy_in(self.dev, lb, ps, sub, move) for lb, ps in groups.items()])
+
+    def drop(self, e, sub):
+        paths = [Path(u.toLocalFile()) for u in e.mimeData().urls() if u.isLocalFile()]
+        e.acceptProposedAction()
+        if self.dev and paths:
+            self.place(paths, sub, move=e.source() is self.items)
 
     def add(self):
         if self.dev:
             paths, _ = QFileDialog.getOpenFileNames(self, "Add to PSP")
             if paths:
-                self._run(files.copy_in, [Path(p) for p in paths], self.sub)
+                self.place([Path(p) for p in paths], self.sub)
 
     def delete(self):
-        sel = self.items.currentItem()
-        if not (self.dev and sel) or sel.data(0, Qt.UserRole) == self.UP:
+        sel = [it.data(0, Qt.UserRole) for it in self.items.selectedItems()]
+        sel = [d for d in sel if d is not self.UP]
+        if not (self.dev and sel):
             return
-        name = sel.data(0, Qt.UserRole).rstrip("/")
-        ask = f"Delete {sel.text(0).rstrip('/')} from the PSP? This cannot be undone."
-        if QMessageBox.question(self, "Delete", ask) == QMessageBox.Yes:
-            self._run(files.remove, (Path(self.sub) / name).as_posix())
+        what = Path(sel[0][1]).name if len(sel) == 1 else f"{len(sel)} items"
+        if QMessageBox.question(self, "Delete", f"Delete {what} from the PSP? This cannot be undone.") == QMessageBox.Yes:
+            self._work(lambda: [files.remove(self.dev, lb, name) for lb, name, _ in sel])
 
 
 class _Feature:

@@ -31,6 +31,10 @@ The side that changed since the last sync wins. If a save changed on both, PSPM 
 Every overwritten save is moved to a backup folder first, and deleting a save on one side never deletes it on the other.
 If PPSSPP isn't found (portable install, custom memstick), press PPSSPP FOLDER and pick its `PSP/SAVEDATA`.
 
+While the PSP is plugged in and PSPM is open, its games show up in PPSSPP too, without copying: in PPSSPP's Games tab, browse to
+`PSP_STICK` in its memory stick folder (`~/.config/ppsspp/PSP_STICK` on Linux, `Documents\PPSSPP\PSP_STICK` on Windows) and open
+`isos` or `games`. PPSSPP remembers the folder. PSPM removes the links when you unplug, so close the game first.
+
 ## Cloud backup
 
 Open CLOUD BACKUP, press SIGN IN TO GOOGLE DRIVE, approve in your browser, and type a folder name (default `PSPM`).
@@ -64,7 +68,7 @@ Other clouds can be added by another package: subclass `pspm.backup.Provider` an
 
 ## PS1 converter
 
-Turns a PS1 game into an `EBOOT.PBP` in `PSP/GAME/<game ID>/`, for the PSP's built-in PS1 emulator (needs custom firmware). Press ADD DISCS and pick one game's images: `.cue` (with its `.bin`), `.img`, `.iso`, `.chd`, `.m3u` or a `.zip`/`.7z`. Several discs become one multi-disc EBOOT, in file name order. The title comes from the disc's game ID; ICON sets an optional icon from any picture.
+Turns a PS1 game into an `EBOOT.PBP` in `PSP/GAME/<game ID>/`, for the PSP's built-in PS1 emulator (needs custom firmware). Press ADD DISCS and pick one game's images: `.cue` (with its `.bin`), `.img`, `.iso`, `.chd`, `.m3u` or a `.zip`/`.7z`. Several discs become one multi-disc EBOOT, in file name order. Adding the discs reads the game ID (SLUS-00594...) from a `.cue`, `.bin`, `.img` or `.iso` and looks the game up online: the title from [GameDB-PSX](https://github.com/niemasd/GameDB-PSX), and the icon (box art), info picture (title screen) and XMB background (a screenshot) from [libretro-thumbnails](https://github.com/libretro-thumbnails/Sony_-_PlayStation). For `.chd` or archives, type the game ID and press FIND ONLINE. Everything on the right can be changed before CONVERT: edit the title, PICK any picture (it's resized for the PSP) or CLEAR it. Background music is picked by hand as a `SND0.AT3` (ATRAC3) file, since no public source has XMB music per game. Source URLs are in `[ps1.online]`.
 
 The conversion is done by [PSXPackager](https://github.com/RupertAvery/PSXPackager) (MIT), downloaded on first use from its GitHub release and checked against the sha256 in `defaults.toml`. On Windows it needs the .NET 8 runtime. PSPM ships no Sony files, BIOS or games.
 

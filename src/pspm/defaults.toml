@@ -34,6 +34,14 @@ games = "CAT_"
 isos = "CAT_"
 music = ""
 
+# Categories that also show other categories' folders, merged into the same tabs (PSP ISOs next to homebrew/minis).
+[files.merge]
+games = ["isos"]
+
+# File types that belong in a category: a file dropped or added in a merged view goes to the first that lists it.
+[files.types]
+isos = [".iso", ".cso"]
+
 # MP3 tagger. Lookups use MusicBrainz + Cover Art Archive: free, no account or key.
 [tagger]
 musicbrainz_url = "https://musicbrainz.org/ws/2"
@@ -49,6 +57,10 @@ sort_by = "album"          # album | artist | genre
 # PPSSPP save sync. Runs both ways each time the PSP is plugged in; overwritten saves are backed up.
 [saves]
 auto_sync = true          # sync on plug-in when nothing conflicts; conflicts always wait for you
+# The PSP's games, linked (not copied) into this folder of PPSSPP's memory stick while the PSP is plugged in, so PPSSPP
+# plays them straight off the PSP. Labels from [device.folders]; [] turns it off.
+game_links = ["isos", "games"]
+games_folder = "PSP_STICK"
 
 # PPSSPP's memory stick PSP folder, per OS; the first that exists is used. {documents} = your Documents folder.
 # Portable or custom installs: pick the folder in the app, or add it here.
@@ -96,6 +108,11 @@ info_file = "PSP/COMMON/pspm_info.txt"
 test_folder = "PSPM_TEST"  # capacity test data, removed after VERIFY
 test_file_mb = 1024        # size of each test file (FAT32 caps files at 4 GB)
 test_reserve_mb = 16       # free space left untouched by the capacity test
+speed_test_mb = 64         # size of the TEST SPEED write and read
+junk = ["._*", ".DS_Store", "Thumbs.db", "desktop.ini"]  # leftovers from other computers, counted on the stick
+plugin_lists = ["SEPLUGINS/PLUGINS.TXT", "SEPLUGINS/GAME.TXT", "SEPLUGINS/VSH.TXT", "SEPLUGINS/POPS.TXT"]
+[diag.cfw_folders]         # a folder on the stick -> the custom firmware it belongs to (add others here)
+"PSP/SAVEDATA/ARK_01234" = "ARK"
 
 # PS1 converter. Turns PS1 disc images into an EBOOT.PBP in the games folder, for the PSP's PS1 emulator.
 # Uses PSXPackager (MIT, github.com/RupertAvery/PSXPackager), downloaded on first use and checked by sha256.
@@ -104,6 +121,17 @@ test_reserve_mb = 16       # free space left untouched by the capacity test
 version = "1.6.3"
 compression = 5            # 0-9; higher is smaller and slower to convert
 timeout_seconds = 120
+
+# Title and artwork found online by game ID (SLUS-00594...). {serial} is the game ID, {name} the Redump name the
+# title list gives. GameDB-PSX (github.com/niemasd/GameDB-PSX) has the titles; libretro-thumbnails has the pictures.
+# Leave a picture empty ("") to not look it up. No public source has XMB music (SND0.AT3), so that one is picked by hand.
+[ps1.online]
+timeout_seconds = 20
+title = "https://raw.githubusercontent.com/niemasd/GameDB-PSX/main/games/{serial}/title.txt"
+name = "https://raw.githubusercontent.com/niemasd/GameDB-PSX/main/games/{serial}/release_name.txt"
+icon0 = "https://raw.githubusercontent.com/libretro-thumbnails/Sony_-_PlayStation/master/Named_Boxarts/{name}.png"
+pic0 = "https://raw.githubusercontent.com/libretro-thumbnails/Sony_-_PlayStation/master/Named_Titles/{name}.png"
+pic1 = "https://raw.githubusercontent.com/libretro-thumbnails/Sony_-_PlayStation/master/Named_Snaps/{name}.png"
 
 [ps1.tool.windows]          # needs the .NET 8 runtime (Windows offers to install it on first run)
 url = "https://github.com/RupertAvery/PSXPackager/releases/download/v1.6.3/psxpackager-win-x64.zip"

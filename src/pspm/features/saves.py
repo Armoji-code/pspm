@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import saves
+from .. import gamelink, saves
 
 
 class _Job(QThread):
@@ -84,10 +84,25 @@ class SavesPage(QWidget):
     def set_device(self, dev):
         self.dev = dev
         self._show([])
+        self.games = self._link_games()
         if dev:
             self.check(auto=self.cfg["saves"]["auto_sync"])
         else:
             self.status.setText("[NO PSP CONNECTED]")
+
+    def _link_games(self):
+        pc = saves.ppsspp_dir(self.cfg, self.state)
+        if not pc:
+            return ""
+        folder = gamelink.link_dir(pc, self.cfg)
+        try:
+            if not self.dev:
+                gamelink.unlink(folder)
+                return ""
+            done = gamelink.link(self.dev, folder, self.cfg["saves"]["game_links"])
+        except OSError as e:
+            return f"  ·  [GAMES NOT LINKED: {e.strerror or e}]"
+        return f"  ·  PSP GAMES IN PPSSPP: {folder}" if done else ""
 
     def pick(self):
         d = QFileDialog.getExistingDirectory(self, "PPSSPP SAVEDATA folder", self.state.get("ppsspp", ""))
@@ -96,6 +111,7 @@ class SavesPage(QWidget):
                 self.state = saves.load_state(self.state_file)
                 self.state["ppsspp"] = d
                 saves.save_state(self.state, self.state_file)
+            self.games = self._link_games()
             self.check()
 
     def check(self, *_, auto=False):
@@ -119,7 +135,7 @@ class SavesPage(QWidget):
         elif conflicts:
             self.status.setText(f"[{conflicts} CHANGED ON BOTH SIDES · PICK AN ACTION, THEN SYNC]")
         else:
-            self.status.setText(f"{len(todo)} TO SYNC" if todo else f"IN SYNC · {len(items)} SAVES")
+            self.status.setText((f"{len(todo)} TO SYNC" if todo else f"IN SYNC · {len(items)} SAVES") + self.games)
 
     def _show(self, items):
         self.items = items
@@ -156,7 +172,7 @@ class SavesPage(QWidget):
     def _synced(self, res):
         run, n = res
         self._show([])
-        self.status.setText(f"SYNCED {n} SAVES" + (f"  ·  OLD COPIES IN {run}" if Path(run).exists() else ""))
+        self.status.setText(f"SYNCED {n} SAVES" + (f"  ·  OLD COPIES IN {run}" if Path(run).exists() else "") + self.games)
 
 
 class _Feature:

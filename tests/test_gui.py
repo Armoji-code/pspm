@@ -120,10 +120,12 @@ def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
 
     got = {}
 
-    def fake(discs, games, cfg, icon):
-        got.update(discs=discs, games=games)
+    def fake(discs, games, cfg, meta):
+        got.update(discs=discs, games=games, meta=meta)
         return games / "SLUS00594"
 
+    png = (Path(__file__).parents[1] / "docs" / "screenshot.png").read_bytes()
+    monkeypatch.setattr(ps1, "lookup", lambda gid, cfg: {"title": f"Game {gid}", "pic1": png})
     monkeypatch.setattr(ps1, "convert", fake)
     monkeypatch.setattr(ps1, "title", lambda pbp: "Metal Gear Solid")
     cfg = config.load(tmp_path / "x")
@@ -131,10 +133,18 @@ def test_ps1_page_converts_and_reports(tmp_path, monkeypatch):
     p = Ps1Page(cfg)
     p.set_device(device.Device(tmp_path, cfg["device"]["folders"]))
     p.discs.addItems(["d1.cue", "d2.cue"])
+    p.game_id.setText("SLUS-00594")
+    p.find()
+    p.job.wait()
+    app.processEvents()
+    assert p.title.text() == "Game SLUS-00594" and p.meta["pic1"] == png and p.shown["pic1"].pixmap()
+    assert p.status.text() == "FOUND GAME SLUS-00594 · NONE ONLINE: ICON, INFO PICTURE"
+    p.title.setText("Metal Gear Solid")
     p.convert()
     p.job.wait()
     app.processEvents()
-    assert got == {"discs": [Path("d1.cue"), Path("d2.cue")], "games": tmp_path / "PSP" / "GAME"}
+    assert got == {"discs": [Path("d1.cue"), Path("d2.cue")], "games": tmp_path / "PSP" / "GAME",
+                   "meta": {"title": "Metal Gear Solid", "pic1": png}}
     assert p.status.text() == "INSTALLED METAL GEAR SOLID TO PSP/GAME/SLUS00594" and not p.discs.count()
 
 
@@ -256,6 +266,39 @@ def test_files_page_tabs_and_double_click(tmp_path):
     assert names() == ["../"] and p.sub == "CAT_PS1/MGS"
     p.enter(p.items.topLevelItem(0))
     assert names() == ["MGS/"]
+
+
+def test_files_page_merges_isos_and_drops(tmp_path):
+    from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PySide6.QtGui import QDropEvent
+
+    from pspm import device
+    from pspm.features.files import FilesPage
+
+    cfg = config.load(tmp_path / "x")
+    psp, pc = tmp_path / "psp", tmp_path / "pc"
+    (psp / "PSP" / "GAME" / "CAT_RPG").mkdir(parents=True)
+    (psp / "ISO" / "CAT_PSP").mkdir(parents=True)
+    (psp / "ISO" / "Loose.iso").write_bytes(b"x")
+    pc.mkdir()
+    (pc / "New.cso").write_bytes(b"x")
+    app = QApplication.instance() or QApplication([])
+    p = FilesPage(cfg)
+    p.set_device(device.Device(psp, cfg["device"]["folders"]))
+    names = lambda: [p.items.topLevelItem(i).text(0) for i in range(p.items.topLevelItemCount())]
+    assert [p.tabs.tabText(i) for i in range(p.tabs.count())] == ["uncategorized", "PSP", "RPG"]
+    assert names() == ["Loose.iso"]
+
+    def drop(target, url):
+        m = QMimeData()
+        m.setUrls([QUrl.fromLocalFile(str(url))])
+        target.dropEvent(QDropEvent(QPointF(-5, -5), Qt.CopyAction, m, Qt.LeftButton, Qt.NoModifier))
+        p.job.wait()
+        app.processEvents()
+
+    drop(p.items, pc / "New.cso")  # from the PC: an ISO type, so it goes to ISO/, not PSP/GAME
+    assert (psp / "ISO" / "New.cso").is_file() and names() == ["Loose.iso", "New.cso"]
+    assert Path(p.items.mimeData([p.items.topLevelItem(0)]).urls()[0].toLocalFile()) == psp / "ISO" / "Loose.iso"
 
 
 def test_setup_page_installs_missing(tmp_path, monkeypatch):
