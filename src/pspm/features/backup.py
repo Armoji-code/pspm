@@ -140,7 +140,11 @@ class BackupPage(QWidget):
         self.job = _Job(fn, self)
         self.job.done.connect(then)
         self.job.failed.connect(lambda e: self.status.setText(f"[ERROR: {e}]"))
+        self.job.step.connect(lambda t: self.status.setText(f"{msg} {t.upper()}"))
         self.job.start()
+
+    def _say(self, text):
+        self.job.step.emit(text)  # called from the worker thread; the signal hops back to the UI
 
     def set_device(self, dev):
         self.dev = dev
@@ -176,7 +180,7 @@ class BackupPage(QWidget):
 
         def plan():
             with saves.LOCK:
-                return saves.plan(psp, pc, saves.load_state(self.saves_state)["last"])
+                return saves.plan(psp, pc, saves.load_state(self.saves_state)["last"], self._say)
 
         self._run(plan, lambda items: self._upload(self._ask(items), (psp, pc)), "SYNCING PSP AND PPSSPP…")
 
@@ -203,14 +207,14 @@ class BackupPage(QWidget):
             if items:
                 with saves.LOCK:
                     st = saves.load_state(self.saves_state)
-                    saves.apply(items, *dirs, st["last"], self.save_backups)
+                    saves.apply(items, *dirs, st["last"], self.save_backups, self._say)
                     saves.save_state(st, self.saves_state)
             synced = sum(i.action in (saves.TO_PC, saves.TO_PSP) for i in items)
             files = backup.scan(root, folders)
             if not backup.pending(files, done):
                 return synced, 0
             prov = cls(pcfg, backup.token(pid))
-            return synced, backup.run(prov, files, done, remote, lambda: backup.save_state(self.state, self.state_file))
+            return synced, backup.run(prov, files, done, remote, lambda: backup.save_state(self.state, self.state_file), self._say)
 
         def report(res):
             synced, n = res
@@ -229,7 +233,7 @@ class BackupPage(QWidget):
         pid, cls, root, remote, done = self.pid, self.all[self.pid], self.dev.root, self.remote, self._done()
 
         def work():
-            n = backup.restore(cls(self._pcfg(), backup.token(pid)), root, remote, done, self.restore_backups)
+            n = backup.restore(cls(self._pcfg(), backup.token(pid)), root, remote, done, self.restore_backups, self._say)
             backup.save_state(self.state, self.state_file)
             return n
 
