@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from .. import cast, deps, stream
+from ..ui.category import CategoryPicker
 from .saves import _Job
 
 STEPS = """PSP TO PC
@@ -39,6 +40,8 @@ class StreamPage(QWidget):
         self.cast_status.setObjectName("label")
         cast_bar = QHBoxLayout()
         cast_bar.addWidget(self.cast_status, 1)
+        self.cat = CategoryPicker(cfg, "stream")
+        cast_bar.addWidget(self.cat)
         for text, fn in [("INSTALL PSP APP", self.install_app), ("START SENDING", self.send),
                          ("STOP SENDING", self.stop_sending)]:
             b = QPushButton(text)
@@ -55,6 +58,7 @@ class StreamPage(QWidget):
 
     def set_device(self, dev):
         self.dev = dev
+        self.cat.set_device(dev)
         if self.job and self.job.isRunning():
             return
         if not dev:
@@ -105,8 +109,8 @@ class StreamPage(QWidget):
 
     def install_app(self):
         if self.dev and not (self.cast_job and self.cast_job.isRunning()):
-            dev = self.dev
-            self._cast(lambda: cast.install_app(dev, self.cfg), "INSTALLING…",
+            dev, cat = self.dev, self.cat.folder()
+            self._cast(lambda: cast.install_app(dev, self.cfg, cat), "INSTALLING…",
                        lambda _: self.cast_status.setText("PSP APP INSTALLED · LEAVE USB MODE, START PSPM SCREEN"))
 
     def send(self, password=None):
