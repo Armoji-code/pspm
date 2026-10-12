@@ -1,7 +1,8 @@
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QSize, Qt, QThread, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -56,6 +57,9 @@ class SavesPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().hide()
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setIconSize(QSize(72, 40))  # ICON0 is 144x80
+        self.table.verticalHeader().setMinimumSectionSize(44)
+        self.table.verticalScrollBar().valueChanged.connect(self._icons)
         self.status = QLabel()
         self.status.setObjectName("label")
         bar = QHBoxLayout()
@@ -127,7 +131,9 @@ class SavesPage(QWidget):
         def work():
             with saves.LOCK:  # the cloud backup page syncs too, and writes the same state file
                 self.state = saves.load_state(self.state_file)
-                return saves.plan(*dirs, self.state["last"], self._say)
+                items = saves.plan(*dirs, self.state["last"], self._say, self.state.setdefault("hashes", {}))
+                saves.save_state(self.state, self.state_file)
+                return items
 
         self._run(work, lambda items: self._planned(items, auto), "CHECKING…")
 
@@ -143,10 +149,11 @@ class SavesPage(QWidget):
             self.status.setText((f"{len(todo)} TO SYNC" if todo else f"IN SYNC · {len(items)} SAVES") + self.games)
 
     def _show(self, items):
-        self.items = items
-        rows = [i for i in items if i.action != saves.SAME]
-        self.table.setRowCount(len(rows))
-        for r, it in enumerate(rows):
+        """Every save: the ones needing a pick first, then the rest to sync, then those already in sync."""
+        self.items = sorted(items, key=lambda i: (i.action == saves.SAME, not i.conflict, i.name))
+        self.table.clearContents()
+        self.table.setRowCount(len(self.items))
+        for r, it in enumerate(self.items):
             for c, text in enumerate([it.name, side(it.psp_time, it.psp_desc), side(it.pc_time, it.pc_desc)]):
                 self.table.setItem(r, c, QTableWidgetItem(text))
             if it.conflict:
@@ -156,8 +163,32 @@ class SavesPage(QWidget):
                 box.currentTextChanged.connect(lambda a, it=it: setattr(it, "action", a))
                 self.table.setCellWidget(r, 3, box)
             else:
-                self.table.setItem(r, 3, QTableWidgetItem(it.action))
+                self.table.setItem(r, 3, QTableWidgetItem("IN SYNC" if it.action == saves.SAME else it.action))
         self.table.resizeRowsToContents()
+        self._icons()
+
+    def _icons(self, *_):
+        """ICON0 for the rows on screen only, PPSSPP's copy first: reading every one off the PSP would stall the page."""
+        t, dirs = self.table, self._dirs()
+        if not (dirs and t.isVisible() and t.rowCount()):
+            return
+        last = t.rowAt(t.viewport().height() - 1)
+        for r in range(max(t.rowAt(0), 0), (t.rowCount() - 1 if last < 0 else last) + 1):
+            cell = t.item(r, 0)
+            if cell.data(Qt.UserRole):
+                continue
+            cell.setData(Qt.UserRole, True)
+            png = next((p for d in reversed(dirs) if (p := d / cell.text() / "ICON0.PNG").is_file()), None)
+            if png:
+                cell.setIcon(QIcon(str(png)))
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._icons()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._icons()
 
     def sync(self):
         dirs = self._dirs()
@@ -168,7 +199,7 @@ class SavesPage(QWidget):
         def work():
             with saves.LOCK:
                 self.state = saves.load_state(self.state_file)
-                run = saves.apply(items, *dirs, self.state["last"], self.backups, self._say)
+                run = saves.apply(items, *dirs, self.state["last"], self.backups, self._say, self.state.setdefault("hashes", {}))
                 saves.save_state(self.state, self.state_file)
             return run, sum(i.action in (saves.TO_PC, saves.TO_PSP) for i in items)
 
@@ -176,7 +207,10 @@ class SavesPage(QWidget):
 
     def _synced(self, res):
         run, n = res
-        self._show([])
+        for it in self.items:
+            if it.action in (saves.TO_PC, saves.TO_PSP):
+                it.action, it.conflict = saves.SAME, False
+        self._show(self.items)
         self.status.setText(f"SYNCED {n} SAVES" + (f"  ·  OLD COPIES IN {run}" if Path(run).exists() else "") + self.games)
 
 

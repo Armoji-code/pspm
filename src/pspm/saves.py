@@ -41,14 +41,29 @@ class Item:
     pc_desc: str = ""
 
 
-def digest(folder: Path) -> str:
-    """Content hash; mtimes aren't used because FAT rounds them and shifts them with DST."""
+def _files(folder: Path) -> list[tuple[str, Path, os.stat_result]]:
+    return sorted((p.relative_to(folder).as_posix(), p, p.stat()) for p in folder.rglob("*") if p.is_file())
+
+
+def _sig(files) -> str:
+    return hashlib.sha1(repr([(r, s.st_size, s.st_mtime_ns) for r, _, s in files]).encode()).hexdigest()
+
+
+def digest(folder: Path, cache: dict | None = None) -> str:
+    """Content hash. Mtimes alone can't say two sides match (FAT rounds them and shifts them with DST), but the
+    same file list, sizes and mtimes as last time means the same content, so `cache` skips re-reading over USB."""
     if not folder.is_dir():
         return ""
+    files = _files(folder)
+    sig, hit = _sig(files), (cache or {}).get(str(folder))
+    if hit and hit[0] == sig:
+        return hit[1]
     h = hashlib.sha1()
-    for p in sorted((p for p in folder.rglob("*") if p.is_file()), key=lambda p: p.relative_to(folder).as_posix()):
+    for rel, p, _ in files:
         data = p.read_bytes()
-        h.update(f"{p.relative_to(folder).as_posix()}\0{len(data)}\0".encode() + data)
+        h.update(f"{rel}\0{len(data)}\0".encode() + data)
+    if cache is not None:
+        cache[str(folder)] = [sig, h.hexdigest()]
     return h.hexdigest()
 
 
@@ -86,13 +101,15 @@ def ppsspp_dir(cfg: dict, state: dict) -> Path | None:
     return None
 
 
-def plan(psp: Path, pc: Path, last: dict, progress=lambda text: None) -> list[Item]:
+def plan(psp: Path, pc: Path, last: dict, progress=lambda text: None, cache: dict | None = None) -> list[Item]:
+    """`cache` (state["hashes"]) is pruned to the folders seen now."""
+    seen = {}
     # shortcut: one sync history for all PSPs; a second PSP's saves show as changes (still backed up). Key by PSP if needed.
     names = sorted({p.name for d in (psp, pc) if d.is_dir() for p in d.iterdir() if p.is_dir() and TMP not in p.name})
     out = []
     for i, n in enumerate(names, 1):
         progress(f"{i}/{len(names)} {n}")
-        a, b = digest(psp / n), digest(pc / n)
+        a, b = digest(psp / n, cache), digest(pc / n, cache)
         ta, tb = newest(psp / n), newest(pc / n)
         conflict = False
         if a == b:
@@ -104,28 +121,35 @@ def plan(psp: Path, pc: Path, last: dict, progress=lambda text: None) -> list[It
         else:
             action, conflict = (TO_PC if ta >= tb else TO_PSP), True
         out.append(Item(n, a, b, ta, tb, action, conflict, describe(psp / n), describe(pc / n)))
+        if cache is not None:
+            seen.update({k: cache[k] for k in (str(psp / n), str(pc / n)) if k in cache})
+    if cache is not None:
+        cache.clear()
+        cache.update(seen)
     return out
 
 
 def apply(items: list[Item], psp: Path, pc: Path, last: dict, backups: Path = BACKUPS,
-          progress=lambda text: None) -> Path:
+          progress=lambda text: None, cache: dict | None = None) -> Path:
     """Run each item's action and record it in `last`. Returns this run's backup folder.
     An item whose folders changed since it was planned is set to SKIP: its plan is stale."""
     run = backups / time.strftime("%Y%m%d-%H%M%S")
     for i, it in enumerate(items, 1):
         progress(f"{i}/{len(items)} {it.name}")
-        if it.action in (TO_PC, TO_PSP) and (digest(psp / it.name), digest(pc / it.name)) != (it.psp_hash, it.pc_hash):
+        if it.action in (TO_PC, TO_PSP) and (digest(psp / it.name, cache), digest(pc / it.name, cache)) != (
+            it.psp_hash, it.pc_hash
+        ):
             it.action = SKIP
         if it.action == TO_PC:
-            _copy(psp / it.name, pc / it.name, run / "pc")
+            _copy(psp / it.name, pc / it.name, run / "pc", it.psp_hash, cache)
         elif it.action == TO_PSP:
-            _copy(pc / it.name, psp / it.name, run / "psp")
+            _copy(pc / it.name, psp / it.name, run / "psp", it.pc_hash, cache)
         if it.action != SKIP:
             last[it.name] = it.pc_hash if it.action == TO_PSP else it.psp_hash
     return run
 
 
-def _copy(src: Path, dst: Path, backup: Path) -> None:
+def _copy(src: Path, dst: Path, backup: Path, h: str, cache: dict | None) -> None:
     # Copy beside dst first, so an unplug mid-copy leaves the old save in place.
     tmp = dst.with_name(dst.name + TMP)
     shutil.rmtree(tmp, ignore_errors=True)
@@ -134,3 +158,5 @@ def _copy(src: Path, dst: Path, backup: Path) -> None:
         backup.mkdir(parents=True, exist_ok=True)
         shutil.move(dst, backup / dst.name)
     tmp.rename(dst)
+    if cache is not None:  # the copy has src's content, so the next check needn't read it back
+        cache[str(dst)] = [_sig(_files(dst)), h]
