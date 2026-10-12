@@ -32,6 +32,28 @@ def test_tagger_page_edit_save_sort(tmp_path):
     assert (tmp_path / "Album" / "Queen - Song.mp3").exists()
 
 
+def test_tagger_page_cover_and_lazy_thumbs(tmp_path, monkeypatch):
+    from PIL import Image
+
+    from pspm import tagger
+    from pspm.features import tagger as page
+
+    for i in range(60):
+        (tmp_path / f"A - {i:02}.mp3").write_bytes((b"\xff\xfb\x90\x00" + b"\x00" * 413) * 10)
+    Image.new("RGB", (800, 800), "red").save(tmp_path / "c.png")
+    monkeypatch.setattr(page.QFileDialog, "getOpenFileName", lambda *a: (str(tmp_path / "c.png"), ""))
+    QApplication.instance() or QApplication([])
+    p = page.TaggerPage(config.load(tmp_path / "x"))
+    p.resize(800, 400)
+    p.load(tmp_path)
+    p.table.selectRow(0)
+    p.set_cover()
+    p.save()
+    assert tagger.read(tmp_path / "A - 00.mp3").has_cover and not tagger.read(tmp_path / "A - 01.mp3").has_cover
+    p._thumbs()
+    assert not p.table.item(0, 0).icon().isNull() and 0 < len(p.shown) < 60  # only rows on screen
+
+
 def test_saves_page_auto_syncs_on_plug_in(tmp_path):
     from pspm import device, saves
     from pspm.features.saves import SavesPage
