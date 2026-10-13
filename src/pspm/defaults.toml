@@ -193,6 +193,12 @@ quality = 80          # JPEG quality of each frame; the PSP decodes them in hard
 # Wayland (wlroots: Sway, Hyprland...) capture; -s 0.5 halves the size, -o <output> picks one of several screens.
 # X11 and Windows use Pillow's ImageGrab.
 wayland_capture = ["grim", "-s", "0.5", "-t", "ppm", "-"]
+# Sound from the PC, switched on the PSP with its note button: off, on, best. 16-bit stereo at these rates.
+audio_rates = [0, 22050, 44100]
+audio_block = 4096    # bytes per sound packet (about 23-46 ms)
+# Linux: parec records what the default output plays (PulseAudio and PipeWire). Windows uses WASAPI loopback.
+audio_capture = ["parec", "--device=@DEFAULT_MONITOR@", "--format=s16le", "--channels=2", "--raw",
+                 "--latency-msec=20", "--rate={rate}"]
 # PSP controls on the PC, as profiles; SELECT on the PSP steps to the next one. Each button maps to a key (a-z, 0-9,
 # space, enter, esc, tab, backspace, shift, ctrl, alt, up, down, left, right, f1-f12), a mouse button
 # (mouse_left/right/middle), a gamepad button (pad_a/b/x/y/lb/rb/select/start/up/down/left/right; Linux only for now)
@@ -332,6 +338,12 @@ name = "grim"
 features = ["stream"]       # captures the screen on Wayland for PC to PSP
 check = { linux = "cmd:grim" }
 packages = { pacman = ["grim"], apt = ["grim"], dnf = ["grim"], zypper = ["grim"] }
+
+[deps.tools.parec]
+name = "parec"
+features = ["stream"]       # records the PC's sound for PC to PSP
+check = { linux = "cmd:parec" }
+packages = { pacman = ["libpulse"], apt = ["pulseaudio-utils"], dnf = ["pulseaudio-utils"], zypper = ["pulseaudio-utils"] }
 
 [deps.tools.dotnet]
 name = ".NET 8 runtime"

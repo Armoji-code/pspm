@@ -18,6 +18,7 @@ from .device import Device
 W, H = 480, 272
 MAX_JPEG = 256 * 1024  # PSPM Screen's frame buffer
 PRESETS = ["best_quality", "balanced", "best_fps"]  # picked in PSPM Screen's menu, sent in each pad packet
+AUDIO = ["off", "on", "best"]  # the PSP's note button steps through these; [cast] audio_rates gives each a sample rate
 APP = files("pspm").joinpath("psp_app/screen")  # prebuilt from psp/pspm_screen; rebuild when its C files change
 
 
@@ -79,6 +80,8 @@ def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> No
             if state:
                 if len(packet) > 14 and packet[14] < len(PRESETS):
                     live["preset"] = PRESETS[packet[14]]
+                if len(packet) > 15 and packet[15] < len(AUDIO):
+                    live["audio"] = AUDIO[packet[15]]
                 mapper.update(*state)
                 pressed(*state)
     except usb.core.USBError:
@@ -87,10 +90,41 @@ def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> No
         mapper.release()
 
 
+def _sound(psp, c: dict, live: dict, lock: threading.Lock, stop) -> None:
+    """Send what the PC is playing while the PSP asks for it ("PSPMAUD1", size, sample rate; then the PCM)."""
+    import usb.core
+
+    src, at, os_ = None, 0, platform.current()
+    try:
+        while not stop():
+            rate = c["audio_rates"][AUDIO.index(live["audio"])]
+            if rate != at:
+                if src:
+                    src.close()
+                src, at = None, rate
+                try:
+                    src = os_.sound(c, rate) if rate else None
+                    live.pop("audio_error", None)
+                except (OSError, ImportError, RuntimeError) as e:  # no parec, no speakers...: shown in the status
+                    live["audio_error"] = str(e) or type(e).__name__
+            pcm = src.read(c["audio_block"]) if src else b""
+            if not pcm:
+                time.sleep(0.05)
+                continue
+            head = (b"PSPMAUD1" + struct.pack("<II", len(pcm), rate)).ljust(512, b"\0")
+            with lock:
+                psp.write(c["endpoint"], head + pcm.ljust(-(-len(pcm) // 512) * 512, b"\0"), c["timeout_ms"])
+    except usb.core.USBError:
+        return  # cable out: the frame loop reports it
+    finally:
+        if src:
+            src.close()
+
+
 def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None = None, m: dict | None = None,
          pressed=lambda buttons, lx, ly: None, switched=lambda name: None) -> None:
     """Send the screen until stop() is true, and turn the PSP's controls into PC input with mapping m (see
-    controls.load). fps(frames sent, average capture ms, preset name) once a second. The PSP picks the preset;
+    controls.load). fps(frames sent, average capture ms, "preset · audio state") once a second. The PSP picks the preset;
     [cast.presets.<name>] overrides quality, max_fps and captures. SELECT on the PSP switches the controls profile:
     switched(name) is called and the PSP shows the name for a moment."""
     c, os_ = cfg["cast"], platform.current()
@@ -103,10 +137,11 @@ def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None =
         switched(name)
 
     mapper = controls.Mapper(m or controls.load(cfg), out, c, switch)
-    live = {"preset": "balanced"}
-    pad = threading.Thread(target=_pad, args=(psp, c, mapper, lambda: stop() or ended.is_set(), pressed, live),
-                           daemon=True)
+    live, lock, done = {"preset": "balanced", "audio": "off"}, threading.Lock(), lambda: stop() or ended.is_set()
+    pad = threading.Thread(target=_pad, args=(psp, c, mapper, done, pressed, live), daemon=True)
     pad.start()
+    sound = threading.Thread(target=_sound, args=(psp, c, live, lock, done), daemon=True)
+    sound.start()
     took = []
 
     def grab():
@@ -126,9 +161,12 @@ def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None =
                 while len(todo) < p["captures"]:
                     todo.append(pool.submit(grab))
                 img = todo.popleft().result()
-                psp.write(c["endpoint"], frame(img, p["quality"], note["text"] if t < note["until"] else ""), c["timeout_ms"])
+                data = frame(img, p["quality"], note["text"] if t < note["until"] else "")
+                with lock:
+                    psp.write(c["endpoint"], data, c["timeout_ms"])
                 if t - t0 >= 1:
-                    fps(len(took), round(1000 * sum(took) / max(1, len(took))), live["preset"])
+                    audio = f"audio error: {live['audio_error']}" if "audio_error" in live else f"audio {live['audio']}"
+                    fps(len(took), round(1000 * sum(took) / max(1, len(took))), f"{live['preset']} · {audio}")
                     took.clear()
                     t0 = t
                 time.sleep(max(0.0, 1 / p["max_fps"] - (time.monotonic() - t)))
@@ -137,4 +175,5 @@ def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None =
     finally:
         ended.set()
         pad.join()
+        sound.join()
         out.close()
