@@ -134,5 +134,14 @@ class Input:
     def move(self, dx: int, dy: int) -> None:
         _send(0, dx=dx, dy=dy, dwFlags=0x1)  # MOUSEEVENTF_MOVE
 
+    def pointer(self) -> tuple[float, float]:
+        """Where the mouse is, 0-1 across the main screen (what ImageGrab captures)."""
+        import ctypes
+        import ctypes.wintypes
+
+        p, u = ctypes.wintypes.POINT(), ctypes.windll.user32
+        u.GetCursorPos(ctypes.byref(p))
+        return p.x / max(1, u.GetSystemMetrics(0)), p.y / max(1, u.GetSystemMetrics(1))  # SM_CXSCREEN, SM_CYSCREEN
+
     def close(self) -> None:
         pass

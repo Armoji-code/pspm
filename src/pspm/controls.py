@@ -17,7 +17,8 @@ PAD = ["pad_a", "pad_b", "pad_x", "pad_y", "pad_lb", "pad_rb", "pad_select", "pa
 STICK = ["pad", "mouse", "arrows", "wasd", "none"]
 _STICK_KEYS = {"arrows": ("left", "right", "up", "down"), "wasd": ("a", "d", "w", "s")}
 MAX_PROFILES = 6
-SWITCH = "select"  # the PSP button that steps to the next profile; it maps to nothing itself
+SWITCH = "select"  # the PSP button that steps to the next profile (on release); it maps to nothing itself
+ZOOM = "start"  # held SELECT + this steps the zoom; then SELECT doesn't switch profiles
 
 
 def load(cfg: dict, path: Path = FILE) -> dict:
@@ -47,18 +48,26 @@ def parse(packet: bytes) -> tuple[int, int, int] | None:
 
 class Mapper:
     """Turns each PSP state into key(target, down) / stick(x, y) / move(dx, dy) calls on `out`, with the active
-    profile of `m` (see load). Reads `m` on every update, so changes on the page apply at once. SELECT steps to
-    the next profile and calls switched(name)."""
+    profile of `m` (see load). Reads `m` on every update, so changes on the page apply at once. Letting go of
+    SELECT steps to the next profile and calls switched(name); SELECT + START calls zoom() instead."""
 
-    def __init__(self, m: dict, out, c: dict, switched=lambda name: None):
+    def __init__(self, m: dict, out, c: dict, switched=lambda name: None, zoom=lambda: None):
         self.m, self.out, self.dead, self.speed, self.held = m, out, c["dead_zone"], c["mouse_speed"], set()
-        self.switched, self.was = switched, 0
+        self.switched, self.zoom, self.was, self.combo = switched, zoom, 0, False
 
     def update(self, buttons: int, lx: int, ly: int) -> None:
-        if buttons & ~self.was & BUTTONS[SWITCH]:
-            self.m["active"] = (self.m["active"] + 1) % len(self.m["profiles"])
-            self.switched(current(self.m)["name"])
+        sel, start = BUTTONS[SWITCH], BUTTONS[ZOOM]
+        if buttons & sel and buttons & ~self.was & start:
+            self.combo = True
+            self.zoom()
+        elif self.was & ~buttons & sel:
+            if not self.combo:
+                self.m["active"] = (self.m["active"] + 1) % len(self.m["profiles"])
+                self.switched(current(self.m)["name"])
+            self.combo = False
         self.was = buttons
+        if buttons & sel:
+            buttons &= ~start  # START with SELECT is the zoom, not its own key
         p = current(self.m)
         want = {p["buttons"].get(n, "none") for n, bit in BUTTONS.items() if buttons & bit and n != SWITCH} - {"none"}
         x, y, mode, d = lx - 128, ly - 128, p["stick"], self.dead

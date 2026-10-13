@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from importlib.resources import files
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 from . import controls, platform, stream
 from . import files as fm
@@ -21,6 +21,8 @@ W, H = 480, 272
 MAX_JPEG = 256 * 1024  # PSPM Screen's frame buffer
 PRESETS = ["best_quality", "balanced", "best_fps"]  # picked in PSPM Screen's menu, sent in each pad packet
 AUDIO = ["off", "on", "best"]  # the PSP's note button steps through these; [cast] audio_rates gives each a sample rate
+ZOOMS = [1, 2, 3]  # SELECT + START on the PSP steps through these, zoomed in where the mouse is
+ARROW = [(0, 0), (0, 16), (4, 12), (7, 18), (9, 17), (6, 11), (11, 11)]  # the mouse pointer, 16 px tall
 APP = files("pspm").joinpath("psp_app/screen")  # prebuilt from psp/pspm_screen; rebuild when its C files change
 
 
@@ -34,6 +36,25 @@ def install_app(dev: Device, cfg: dict, cat: str = "") -> Path:
 def installed(dev: Device, cfg: dict) -> bool:
     found = fm.find_app(dev, cfg["cast"]["app"])
     return bool(found) and (found / "pspm_usb.prx").is_file()
+
+
+def view(img: Image.Image, pointer=None, zoom: int = 1) -> Image.Image:
+    """The screen with the mouse pointer drawn at `pointer` (0-1 across it, or None), cropped to 1/zoom of its
+    width around the pointer (or the middle)."""
+    img = img.convert("RGB")
+    w, h = img.size
+    x, y = pointer if pointer else (0.5, 0.5)
+    cw = w / zoom
+    ch = min(h, cw * H / W)
+    if pointer and 0 <= x <= 1 and 0 <= y <= 1:
+        s, px, py = cw / W, x * w, y * h  # 16 px tall on the PSP whatever the zoom
+        dots = [(px + ax * s, py + ay * s) for ax, ay in ARROW]
+        ImageDraw.Draw(img).polygon(dots, fill="white", outline="black", width=max(1, round(s)))
+    if zoom == 1:
+        return img
+    left = min(max(0, x * w - cw / 2), w - cw)
+    top = min(max(0, y * h - ch / 2), h - ch)
+    return img.crop((round(left), round(top), round(left + cw), round(top + ch)))
 
 
 def frame(img: Image.Image, quality: int, note: str = "") -> bytes:
@@ -161,8 +182,9 @@ def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> No
         mapper.release()
 
 
-def _sound(psp, c: dict, live: dict, lock: threading.Lock, stop) -> None:
-    """Send what the PC is playing while the PSP asks for it ("PSPMAUD1", size, sample rate; then the PCM)."""
+def _sound(psp, c: dict, live: dict, lock: threading.Lock, stop, say=lambda text: None) -> None:
+    """Send what the PC is playing while the PSP asks for it ("PSPMAUD1", size, sample rate; then the PCM).
+    A failure goes to live["audio_error"] and say() (shown on the PSP)."""
     import usb.core
 
     src, at, os_ = None, 0, platform.current()
@@ -178,7 +200,14 @@ def _sound(psp, c: dict, live: dict, lock: threading.Lock, stop) -> None:
                     live.pop("audio_error", None)
                 except (OSError, ImportError, RuntimeError) as e:  # no parec, no speakers...: shown in the status
                     live["audio_error"] = str(e) or type(e).__name__
-            pcm = src.read(c["audio_block"]) if src else b""
+                    say(f"AUDIO ERROR: {live['audio_error']}")
+            try:
+                pcm = src.read(c["audio_block"]) if src else b""
+            except (OSError, RuntimeError) as e:  # the recorder stopped: tried again when the PSP switches sound
+                live["audio_error"] = str(e) or type(e).__name__
+                say(f"AUDIO ERROR: {live['audio_error']}")
+                src.close()
+                src, pcm = None, b""
             if not pcm:
                 time.sleep(0.05)
                 continue
@@ -202,16 +231,25 @@ def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None =
     psp = open_psp(cfg, password)
     out, ended = os_.Input("PSPM PSP"), threading.Event()
     note = {"text": "", "until": 0.0}
+    zoom = {"at": 0}
+    where = getattr(out, "pointer", lambda: None)  # an OS layer that can't tell draws no pointer
+
+    def say(text, seconds=2):
+        note.update(text=text, until=time.monotonic() + seconds)
 
     def switch(name):
-        note.update(text=f"CONTROLS: {name}", until=time.monotonic() + 2)
+        say(f"CONTROLS: {name}")
         switched(name)
 
-    mapper = controls.Mapper(m or controls.load(cfg), out, c, switch)
+    def step_zoom():
+        zoom["at"] = (zoom["at"] + 1) % len(ZOOMS)
+        say(f"ZOOM {ZOOMS[zoom['at']]}X")
+
+    mapper = controls.Mapper(m or controls.load(cfg), out, c, switch, step_zoom)
     live, lock, done = {"preset": "balanced", "audio": "off"}, threading.Lock(), lambda: stop() or ended.is_set()
     pad = threading.Thread(target=_pad, args=(psp, c, mapper, done, pressed, live), daemon=True)
     pad.start()
-    sound = threading.Thread(target=_sound, args=(psp, c, live, lock, done), daemon=True)
+    sound = threading.Thread(target=_sound, args=(psp, c, live, lock, done, lambda t: say(t, 5)), daemon=True)
     sound.start()
     took = []
 
@@ -232,7 +270,7 @@ def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None =
                 while len(todo) < p["captures"]:
                     todo.append(pool.submit(grab))
                 img = todo.popleft().result()
-                data = frame(img, p["quality"], note["text"] if t < note["until"] else "")
+                data = frame(view(img, where(), ZOOMS[zoom["at"]]), p["quality"], note["text"] if t < note["until"] else "")
                 with lock:
                     psp.write(c["endpoint"], data, c["timeout_ms"])
                 if t - t0 >= 1:
