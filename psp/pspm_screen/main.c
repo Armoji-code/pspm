@@ -4,6 +4,7 @@
 #include <pspctrl.h>
 #include <pspdebug.h>
 #include <pspdisplay.h>
+#include <pspiofilemgr.h>
 #include <pspjpeg.h>
 #include <psppower.h>
 #include <psputility.h>
@@ -26,6 +27,10 @@ int pspmUsbWrite(const void *src, int size);
 #define VRAM ((unsigned *)0x44000000) /* uncached */
 #define BUFS (VRAM + STRIDE * H)      /* two 32-bit buffers after the debug screen's */
 
+/* Picked in the menu, sent to the PC in every pad packet, kept in settings.bin next to the EBOOT. */
+static const char *PRESETS[] = {"BEST QUALITY", "BALANCED", "BEST FPS"};
+static volatile int preset = 1;
+
 static unsigned char in[HEAD + MAX_JPEG] __attribute__((aligned(64)));
 static unsigned out[W * H] __attribute__((aligned(64)));
 
@@ -40,7 +45,8 @@ static int callbacks(SceSize args, void *argp) {
     return 0;
 }
 
-/* Buttons and stick to the PC, 60 times a second: "PSPMPAD1", buttons (u32), stick x, y (0-255, 128 = middle). */
+/* Buttons and stick to the PC, 60 times a second: "PSPMPAD1", buttons (u32), stick x, y (0-255, 128 = middle),
+   quality preset (0 best quality, 1 balanced, 2 best FPS). */
 static int pad(SceSize args, void *argp) {
     unsigned char msg[16] __attribute__((aligned(64))) = "PSPMPAD1";
     SceCtrlData c;
@@ -51,6 +57,7 @@ static int pad(SceSize args, void *argp) {
         memcpy(msg + 8, &c.Buttons, 4);
         msg[12] = c.Lx;
         msg[13] = c.Ly;
+        msg[14] = preset;
         if (pspmUsbWrite(msg, sizeof msg) < 0)
             sceKernelDelayThread(100 * 1000); /* PC not reading yet */
     }
@@ -76,6 +83,44 @@ static void stop(const char *fmt, int err) {
     sceKernelSleepThread();
 }
 
+/* Before streaming: pick the quality preset (LEFT/RIGHT), CROSS starts. */
+static void menu(const char *dir) {
+    char file[256];
+    unsigned char b;
+    snprintf(file, sizeof file, "%ssettings.bin", dir);
+    SceUID f = sceIoOpen(file, PSP_O_RDONLY, 0);
+    if (f >= 0) {
+        if (sceIoRead(f, &b, 1) == 1 && b < 3)
+            preset = b;
+        sceIoClose(f);
+    }
+    SceCtrlData c;
+    unsigned old = ~0u; /* nothing counts until it's released once */
+    for (;;) {
+        pspDebugScreenSetXY(0, 2);
+        pspDebugScreenPrintf("QUALITY      < %-12s >\n\n", PRESETS[preset]);
+        pspDebugScreenPrintf("CONNECTION     USB\n\n\n");
+        pspDebugScreenPrintf("LEFT/RIGHT: CHANGE    CROSS: START    HOME: QUIT");
+        sceCtrlReadBufferPositive(&c, 1);
+        unsigned now = c.Buttons & ~old;
+        old = c.Buttons;
+        if (now & PSP_CTRL_LEFT)
+            preset = (preset + 2) % 3;
+        if (now & PSP_CTRL_RIGHT)
+            preset = (preset + 1) % 3;
+        if (now & PSP_CTRL_CROSS)
+            break;
+    }
+    b = preset;
+    f = sceIoOpen(file, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
+    if (f >= 0) {
+        sceIoWrite(f, &b, 1);
+        sceIoClose(f);
+    }
+    pspDebugScreenClear();
+    pspDebugScreenPrintf("PSPM SCREEN - %s\n\n", PRESETS[preset]);
+}
+
 int main(int argc, char *argv[]) {
     start("callbacks", callbacks, 0x11);
     pspDebugScreenInit();
@@ -87,6 +132,8 @@ int main(int argc, char *argv[]) {
         strcpy(path, argv[0]);
         strrchr(path, '/')[1] = 0;
     }
+    char dir[256];
+    strcpy(dir, path);
     strcat(path, "pspm_usb.prx");
     SceUID m = load(path);
     if (m < 0)
@@ -98,6 +145,9 @@ int main(int argc, char *argv[]) {
         r = sceJpegCreateMJpeg(W, H);
     if (r < 0)
         stop("Could not start the JPEG decoder (%08x).", r);
+    sceCtrlSetSamplingCycle(0);
+    sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
+    menu(dir);
     r = pspmUsbStart();
     if (r < 0)
         stop("Could not start USB (%08x).\nIf RemoteJoyLite is on for games, turn it off\n"

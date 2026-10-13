@@ -131,3 +131,39 @@ def test_slow_capture_runs_in_parallel(tmp_path, monkeypatch):
     monkeypatch.setattr(platform.current(), "Input", Input)
     cast.send(cfg, lambda: len(sent) >= 12, m={"buttons": {}, "stick": "pad"})
     assert len(sent) >= 12 and max(most) >= 2  # grabs overlap (how many depends on thread start-up timing)
+
+
+def test_psp_preset_picks_quality(tmp_path, monkeypatch):
+    cfg = config.load(tmp_path / "x")
+    used, pad = [], [b"PSPMPAD1" + struct.pack("<IBBB", 0, 128, 128, 2)]
+
+    class Psp:
+        def write(self, ep, data, timeout):
+            pass
+
+        def read(self, ep, size, timeout):
+            import usb.core
+
+            if not pad:
+                raise usb.core.USBTimeoutError("timeout")
+            return pad.pop(0)
+
+    class Input:
+        def __init__(self, name):
+            pass
+
+        def key(self, t, down):
+            pass
+
+        def stick(self, x, y):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
+    monkeypatch.setattr(cast, "frame", lambda img, q: used.append(q) or b"")
+    monkeypatch.setattr(platform.current(), "capture", lambda c: Image.new("RGB", (8, 8)), raising=False)
+    monkeypatch.setattr(platform.current(), "Input", Input)
+    cast.send(cfg, lambda: len(used) > 5 and not pad, m={"buttons": {}, "stick": "pad"})
+    assert used[-1] == cfg["cast"]["presets"]["best_fps"]["quality"]

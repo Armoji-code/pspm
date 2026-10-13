@@ -28,7 +28,7 @@ LINUX: THE FIRST START ASKS FOR YOUR PASSWORD ONCE TO ALLOW THE PSP'S USB."""
 CAST_STEPS = """PC TO PSP
 1. WITH THE PSP IN USB MODE, PRESS INSTALL PSP APP.
 2. LEAVE USB MODE, KEEP THE CABLE IN, AND START PSPM SCREEN ON THE PSP.
-3. PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; ITS BUTTONS AND STICK CONTROL THE PC. HOME ON THE PSP QUITS.
+3. PICK A QUALITY IN PSPM SCREEN AND PRESS ✕, THEN PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; ITS BUTTONS AND STICK CONTROL THE PC. HOME ON THE PSP QUITS.
 
 REMOTEJOYLITE BLOCKS THIS WHILE IT'S ON FOR GAMES: REMOVE PLUGIN AND RESTART THE PSP FIRST.
 LINUX: WAYLAND NEEDS GRIM (SWAY, HYPRLAND...; THE SETUP PAGE INSTALLS IT).
@@ -150,7 +150,8 @@ class StreamPage(QWidget):
             return
         self.sending = True
         self._cast(lambda: cast.send(self.cfg, lambda: not self.sending,
-                                     lambda n, ms: self.cast_job.step.emit(f"SENDING · {n} FPS · CAPTURE {ms} MS"),
+                                     lambda n, ms, preset: self.cast_job.step.emit(
+                                         f"SENDING · {_name(preset)} · {n} FPS · CAPTURE {ms} MS"),
                                      password, self.controls, self.pad_state.emit),
                    "CONNECTING TO THE PSP…", lambda _: self.cast_status.setText("STOPPED"))
 
