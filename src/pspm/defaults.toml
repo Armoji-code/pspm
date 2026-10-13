@@ -187,6 +187,11 @@ bcd_device = 0x0200   # tells PSPM Screen apart from RemoteJoyLite (0x0100) on t
 endpoint = 0x02       # frames to the PSP
 pad_endpoint = 0x81   # the PSP's buttons and stick back to the PC
 timeout_ms = 2000
+# Wi-Fi (picked in PSPM Screen's menu): PSPM finds the PSP with a UDP broadcast, then streams over TCP.
+wifi_port = 4000
+find_port = 4001
+find_seconds = 3
+wifi_host = ""        # the address the PSP shows, when a firewall blocks the search
 max_fps = 30
 captures = 4          # screen captures in flight at once; more = higher FPS when capturing is slow
 quality = 80          # JPEG quality of each frame; the PSP decodes them in hardware

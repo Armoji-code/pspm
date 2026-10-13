@@ -1,6 +1,8 @@
 """PC screen to the PSP: PSPM Screen (psp/pspm_screen) runs on the PSP and shows the frames this sends over the
-USB cable. Like PSP to PC streaming, it works while the PSP is out of USB mode. No UI."""
+USB cable or Wi-Fi. Like PSP to PC streaming, it works while the PSP is out of USB mode. No UI."""
 import io
+import select
+import socket
 import struct
 import threading
 import time
@@ -49,20 +51,89 @@ def frame(img: Image.Image, quality: int, note: str = "") -> bytes:
     return head.ljust(512, b"\0") + data.ljust(-(-len(data) // 512) * 512, b"\0")
 
 
+class Net:
+    """PSPM Screen over Wi-Fi: the same stream as over USB, on one TCP connection, with pyusb's read/write and
+    errors so the rest doesn't care which it is."""
+
+    def __init__(self, host: str, c: dict):
+        self.sock = socket.create_connection((host, c["wifi_port"]), c["timeout_ms"] / 1000)
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.host, self.got = host, b""
+
+    def write(self, _endpoint, data: bytes, _timeout=None) -> int:
+        import usb.core
+
+        try:
+            self.sock.sendall(data)
+        except OSError as e:
+            raise usb.core.USBError(f"Wi-Fi: {e}") from None
+        return len(data)
+
+    def read(self, _endpoint, _size, timeout_ms: int) -> bytes:
+        """One 16-byte pad packet."""
+        import usb.core
+
+        while len(self.got) < 16:
+            if not select.select([self.sock], [], [], timeout_ms / 1000)[0]:
+                raise usb.core.USBTimeoutError("timeout")
+            try:
+                more = self.sock.recv(4096)
+            except OSError as e:
+                raise usb.core.USBError(f"Wi-Fi: {e}") from None
+            if not more:
+                raise usb.core.USBError("Wi-Fi: the PSP closed the connection")
+            self.got += more
+        packet, self.got = self.got[:16], self.got[16:]
+        return packet
+
+
+def find_psp(c: dict) -> str | None:
+    """The address of a PSP running PSPM Screen on Wi-Fi: [cast] wifi_host, else whoever answers a broadcast."""
+    if c.get("wifi_host"):
+        return c["wifi_host"]
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.settimeout(0.5)
+        end = time.monotonic() + c["find_seconds"]
+        while time.monotonic() < end:
+            try:
+                s.sendto(b"PSPMFIND", ("255.255.255.255", c["find_port"]))
+                while True:
+                    data, (host, _port) = s.recvfrom(16)
+                    if data == b"PSPMHERE":
+                        return host
+            except TimeoutError:
+                continue
+            except OSError:  # no network
+                return None
+    return None
+
+
 def open_psp(cfg: dict, password: str | None = None):
-    """The PSP running PSPM Screen, over libusb. On Linux the first call allows the PSP's USB (one password)."""
+    """The PSP running PSPM Screen: over libusb when the cable is in, else over Wi-Fi. On Linux the first call
+    allows the PSP's USB (one password)."""
     import usb.core  # pyusb; imported here so the rest of PSPM never needs libusb
 
     c = cfg["cast"]
     platform.current().stream_ready(stream.usb_rule(cfg), password)
+    no_libusb = False
     try:
         psp = usb.core.find(idVendor=c["vendor"], idProduct=c["product"], bcdDevice=c["bcd_device"])
     except usb.core.NoBackendError:
-        raise OSError("libusb not found: install it from the SETUP page") from None
-    if psp is None:
-        raise OSError("PSP not found: start PSPM SCREEN on the PSP with the cable in")
-    psp.set_configuration()
-    return psp
+        psp, no_libusb = None, True
+    if psp is not None:
+        psp.set_configuration()
+        return psp
+    host = find_psp(c)
+    if host:
+        try:
+            return Net(host, c)
+        except OSError as e:
+            raise OSError(f"PSP found at {host} but could not connect: {e}") from None
+    if no_libusb:
+        raise OSError("libusb not found: install it from the SETUP page (Wi-Fi: no PSP answered either)")
+    raise OSError("PSP not found: start PSPM SCREEN on the PSP (cable in, or Wi-Fi picked in its menu). "
+                  "If it shows a Wi-Fi address, a firewall may block the search: set [cast] wifi_host to it")
 
 
 def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> None:

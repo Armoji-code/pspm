@@ -1,5 +1,5 @@
-/* PSPM Screen: shows the PC's screen, which PSPM sends over the USB cable as 480x272 JPEG frames decoded by the
-   PSP's hardware, and sends the PSP's buttons and stick back to the PC. */
+/* PSPM Screen: shows the PC's screen, which PSPM sends over the USB cable or Wi-Fi as 480x272 JPEG frames decoded
+   by the PSP's hardware, and sends the PSP's buttons and stick back to the PC. */
 #include <pspkernel.h>
 #include <pspctrl.h>
 #include <pspdebug.h>
@@ -9,6 +9,13 @@
 #include <psppower.h>
 #include <pspaudio.h>
 #include <psputility.h>
+#include <pspnet.h>
+#include <pspnet_inet.h>
+#include <pspnet_apctl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #include <kubridge.h> /* kuKernelLoadModule loads the kernel driver; from the CFW (ARK, PRO, ME) */
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +53,33 @@ static short ring[RING / 2];
 static volatile unsigned head, tail; /* bytes written / played, free-running */
 static volatile int rate;
 
+/* Connection, picked in the menu: 0 = USB cable, else the PSP's saved Wi-Fi network with that number. Over Wi-Fi
+   the PC finds the PSP with a UDP "PSPMFIND" (answered "PSPMHERE") and connects over TCP; the stream is the same. */
+#define PORT 4000
+#define FIND_PORT 4001
+#define NETS 10
+static int conn;
+static char names[NETS + 1][32] = {"USB"};
+static volatile int pc = -1; /* the PC's socket over Wi-Fi */
+
+static int rx(void *dst, int size) {
+    if (!conn)
+        return pspmUsbRead(dst, size);
+    for (int got = 0; got < size;) {
+        int n = recv(pc, (char *)dst + got, size - got, 0);
+        if (n <= 0)
+            return -1;
+        got += n;
+    }
+    return size;
+}
+
+static int tx(const void *src, int size) {
+    if (!conn)
+        return pspmUsbWrite(src, size);
+    return pc < 0 ? -1 : send(pc, src, size, 0);
+}
+
 static unsigned char in[HEAD + MAX_JPEG] __attribute__((aligned(64)));
 static unsigned out[W * H] __attribute__((aligned(64)));
 
@@ -82,7 +116,7 @@ static int pad(SceSize args, void *argp) {
             shown = sceKernelGetSystemTimeLow() + 2000000;
         }
         msg[15] = audio;
-        if (pspmUsbWrite(msg, sizeof msg) < 0)
+        if (tx(msg, sizeof msg) < 0)
             sceKernelDelayThread(100 * 1000); /* PC not reading yet */
     }
     return 0;
@@ -141,42 +175,108 @@ static void stop(const char *fmt, int err) {
     sceKernelSleepThread();
 }
 
-/* Before streaming: pick the quality preset (LEFT/RIGHT), CROSS starts. */
+/* Answers the PC's "PSPMFIND" broadcasts so it can find the PSP's address. */
+static int find(SceSize args, void *argp) {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in a = {.sin_family = AF_INET, .sin_port = htons(FIND_PORT)};
+    bind(s, (struct sockaddr *)&a, sizeof a);
+    for (;;) {
+        char b[16];
+        socklen_t n = sizeof a;
+        if (recvfrom(s, b, sizeof b, 0, (struct sockaddr *)&a, &n) >= 8 && !memcmp(b, "PSPMFIND", 8))
+            sendto(s, "PSPMHERE", 8, 0, (struct sockaddr *)&a, n);
+    }
+    return 0;
+}
+
+/* Joins the saved network, shows the PSP's address and listens for PSPM. */
+static int wifi(void) {
+    int r = sceUtilityLoadNetModule(PSP_NET_MODULE_COMMON);
+    if (r >= 0)
+        r = sceUtilityLoadNetModule(PSP_NET_MODULE_INET);
+    if (r >= 0)
+        r = sceNetInit(128 * 1024, 42, 4 * 1024, 42, 4 * 1024);
+    if (r >= 0)
+        r = sceNetInetInit();
+    if (r >= 0)
+        r = sceNetApctlInit(0x8000, 48);
+    if (r >= 0)
+        r = sceNetApctlConnect(conn);
+    if (r < 0)
+        stop("Could not start Wi-Fi (%08x).\nIs the WLAN switch on?", r);
+    pspDebugScreenPrintf("Joining %s...\n", names[conn]);
+    int state, was = 0;
+    for (;;) {
+        if (sceNetApctlGetState(&state) < 0 || (was && !state))
+            stop("Could not join the network (%d).\nCheck it in SETTINGS > NETWORK SETTINGS.", was);
+        if (state == PSP_NET_APCTL_STATE_GOT_IP)
+            break;
+        was = state;
+        sceKernelDelayThread(50 * 1000);
+    }
+    SceNetApctlInfo info;
+    sceNetApctlGetInfo(PSP_NET_APCTL_INFO_IP, &info);
+    pspDebugScreenPrintf("Wi-Fi address: %s\n\n", info.ip);
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in a = {.sin_family = AF_INET, .sin_port = htons(PORT)};
+    if (s < 0 || bind(s, (struct sockaddr *)&a, sizeof a) < 0 || listen(s, 1) < 0)
+        stop("Could not listen for the PC (%08x).", s);
+    start("find", find, 0x18);
+    return s;
+}
+
+/* Before streaming: UP/DOWN picks a row, LEFT/RIGHT changes it, CROSS starts. */
 static void menu(const char *dir) {
     char file[256];
-    unsigned char b;
+    unsigned char b[2];
+    int count = 1, ids[NETS + 1] = {0}, row = 0, at = 0;
+    for (int i = 1; i <= NETS; i++) { /* the networks saved in SETTINGS > NETWORK SETTINGS */
+        netData d;
+        if (sceUtilityCheckNetParam(i) == 0 && sceUtilityGetNetParam(i, PSP_NETPARAM_NAME, &d) == 0) {
+            snprintf(names[count], sizeof names[0], "WI-FI: %.24s", d.asString);
+            ids[count++] = i;
+        }
+    }
     snprintf(file, sizeof file, "%ssettings.bin", dir);
     SceUID f = sceIoOpen(file, PSP_O_RDONLY, 0);
     if (f >= 0) {
-        if (sceIoRead(f, &b, 1) == 1 && b < 3)
-            preset = b;
+        if (sceIoRead(f, b, 2) == 2) {
+            preset = b[0] < 3 ? b[0] : preset;
+            for (int i = 0; i < count; i++)
+                at = ids[i] == b[1] ? i : at;
+        }
         sceIoClose(f);
     }
     SceCtrlData c;
     unsigned old = ~0u; /* nothing counts until it's released once */
     for (;;) {
         pspDebugScreenSetXY(0, 2);
-        pspDebugScreenPrintf("QUALITY      < %-12s >\n\n", PRESETS[preset]);
-        pspDebugScreenPrintf("CONNECTION     USB\n\n\n");
-        pspDebugScreenPrintf("LEFT/RIGHT: CHANGE    CROSS: START    HOME: QUIT");
+        pspDebugScreenPrintf("%c QUALITY      < %-12s >\n\n", row ? ' ' : '>', PRESETS[preset]);
+        pspDebugScreenPrintf("%c CONNECTION   < %-30s >\n\n\n", row ? '>' : ' ', names[at]);
+        pspDebugScreenPrintf("UP/DOWN: PICK   LEFT/RIGHT: CHANGE   CROSS: START   HOME: QUIT");
         sceCtrlReadBufferPositive(&c, 1);
         unsigned now = c.Buttons & ~old;
+        int step = (now & PSP_CTRL_RIGHT ? 1 : 0) - (now & PSP_CTRL_LEFT ? 1 : 0);
         old = c.Buttons;
-        if (now & PSP_CTRL_LEFT)
-            preset = (preset + 2) % 3;
-        if (now & PSP_CTRL_RIGHT)
-            preset = (preset + 1) % 3;
+        if (now & (PSP_CTRL_UP | PSP_CTRL_DOWN))
+            row ^= 1;
+        if (row)
+            at = (at + step + count) % count;
+        else
+            preset = (preset + step + 3) % 3;
         if (now & PSP_CTRL_CROSS)
             break;
     }
-    b = preset;
+    conn = ids[at];
+    b[0] = preset;
+    b[1] = conn;
     f = sceIoOpen(file, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
     if (f >= 0) {
-        sceIoWrite(f, &b, 1);
+        sceIoWrite(f, b, 2);
         sceIoClose(f);
     }
     pspDebugScreenClear();
-    pspDebugScreenPrintf("PSPM SCREEN - %s\n\n", PRESETS[preset]);
+    pspDebugScreenPrintf("PSPM SCREEN - %s - %s\n\n", PRESETS[preset], names[at]);
 }
 
 int main(int argc, char *argv[]) {
@@ -206,7 +306,8 @@ int main(int argc, char *argv[]) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     menu(dir);
-    r = pspmUsbStart();
+    int server = conn ? wifi() : -1;
+    r = conn ? 0 : pspmUsbStart();
     if (r < 0)
         stop("Could not start USB (%08x).\nIf RemoteJoyLite is on for games, turn it off\n"
              "(PSPM: STREAMING > REMOVE PLUGIN) and restart the PSP.", r);
@@ -216,14 +317,22 @@ int main(int argc, char *argv[]) {
 
     int back = 0;
     for (;;) {
-        if (pspmUsbRead(in, HEAD) != HEAD) {
-            sceKernelDelayThread(100 * 1000);
+        if (conn && pc < 0) {
+            pc = accept(server, NULL, NULL);
+            continue;
+        }
+        if (rx(in, HEAD) != HEAD) {
+            if (conn) { /* the PC stopped: wait for the next one */
+                close(pc);
+                pc = -1;
+            } else
+                sceKernelDelayThread(100 * 1000);
             continue;
         }
         unsigned size;
         memcpy(&size, in + 8, 4);
         if (!memcmp(in, "PSPMAUD1", 8)) {
-            if (size > MAX_JPEG || pspmUsbRead(in + HEAD, (size + 511) & ~511) < 0)
+            if (size > MAX_JPEG || rx(in + HEAD, (size + 511) & ~511) < 0)
                 continue;
             memcpy((void *)&rate, in + 12, 4);
             if (head - tail + size > RING / 2) /* falling behind: drop the oldest instead of adding delay */
@@ -235,7 +344,7 @@ int main(int argc, char *argv[]) {
         }
         if (memcmp(in, "PSPMSCR2", 8))
             continue; /* joined mid-frame: skip packets until the next header */
-        if (size > MAX_JPEG || pspmUsbRead(in + HEAD, (size + 511) & ~511) < 0)
+        if (size > MAX_JPEG || rx(in + HEAD, (size + 511) & ~511) < 0)
             continue;
         /* the decoder reads and writes memory directly, past the CPU cache */
         sceKernelDcacheWritebackInvalidateRange(in + HEAD, size);
