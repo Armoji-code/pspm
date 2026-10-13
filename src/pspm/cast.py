@@ -17,6 +17,7 @@ from .device import Device
 
 W, H = 480, 272
 MAX_JPEG = 256 * 1024  # PSPM Screen's frame buffer
+PRESETS = ["best_quality", "balanced", "best_fps"]  # picked in PSPM Screen's menu, sent in each pad packet
 APP = files("pspm").joinpath("psp_app/screen")  # prebuilt from psp/pspm_screen; rebuild when its C files change
 
 
@@ -61,17 +62,21 @@ def open_psp(cfg: dict, password: str | None = None):
     return psp
 
 
-def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed) -> None:
-    """Read the PSP's controls until stop(); every packet goes to the mapper and pressed(buttons, x, y)."""
+def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> None:
+    """Read the PSP's controls until stop(); every packet goes to the mapper and pressed(buttons, x, y), and
+    live["preset"] follows the quality preset picked on the PSP."""
     import usb.core
 
     try:
         while not stop():
             try:
-                state = controls.parse(bytes(psp.read(c["pad_endpoint"], 512, 200)))
+                packet = bytes(psp.read(c["pad_endpoint"], 512, 200))
+                state = controls.parse(packet)
             except usb.core.USBTimeoutError:
                 continue
             if state:
+                if len(packet) > 14 and packet[14] < len(PRESETS):
+                    live["preset"] = PRESETS[packet[14]]
                 mapper.update(*state)
                 pressed(*state)
     except usb.core.USBError:
@@ -80,15 +85,18 @@ def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed) -> None:
         mapper.release()
 
 
-def send(cfg: dict, stop, fps=lambda n, ms: None, password: str | None = None, m: dict | None = None,
+def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None = None, m: dict | None = None,
          pressed=lambda buttons, lx, ly: None) -> None:
     """Send the screen until stop() is true, and turn the PSP's controls into PC input with mapping m (see
-    controls.load). fps(frames sent, average capture ms) once a second."""
+    controls.load). fps(frames sent, average capture ms, preset name) once a second. The PSP picks the preset;
+    [cast.presets.<name>] overrides quality, max_fps and captures."""
     c, os_ = cfg["cast"], platform.current()
     psp = open_psp(cfg, password)
     out, ended = os_.Input("PSPM PSP"), threading.Event()
     mapper = controls.Mapper(m or controls.load(cfg), out, c)
-    pad = threading.Thread(target=_pad, args=(psp, c, mapper, lambda: stop() or ended.is_set(), pressed), daemon=True)
+    live = {"preset": "balanced"}
+    pad = threading.Thread(target=_pad, args=(psp, c, mapper, lambda: stop() or ended.is_set(), pressed, live),
+                           daemon=True)
     pad.start()
     took = []
 
@@ -98,21 +106,23 @@ def send(cfg: dict, stop, fps=lambda n, ms: None, password: str | None = None, m
         took.append(time.monotonic() - t)
         return img
 
-    gap, t0 = 1 / c["max_fps"], time.monotonic()
+    t0 = time.monotonic()
+    most = max(c["captures"], *(p.get("captures", 0) for p in c["presets"].values()))
     try:
-        # several captures in flight: grim takes ~200 ms a frame, so one at a time caps at ~5 FPS
-        with ThreadPoolExecutor(c["captures"]) as pool:
-            todo = deque(pool.submit(grab) for _ in range(c["captures"]))
+        # several captures in flight: grim takes ~250 ms a frame, so one at a time caps at ~4 FPS
+        with ThreadPoolExecutor(most) as pool:
+            todo = deque([pool.submit(grab)])
             while not stop():
-                t = time.monotonic()
+                t, p = time.monotonic(), c | c["presets"].get(live["preset"], {})
+                while len(todo) < p["captures"]:
+                    todo.append(pool.submit(grab))
                 img = todo.popleft().result()
-                todo.append(pool.submit(grab))
-                psp.write(c["endpoint"], frame(img, c["quality"]), c["timeout_ms"])
+                psp.write(c["endpoint"], frame(img, p["quality"]), c["timeout_ms"])
                 if t - t0 >= 1:
-                    fps(len(took), round(1000 * sum(took) / max(1, len(took))))
+                    fps(len(took), round(1000 * sum(took) / max(1, len(took))), live["preset"])
                     took.clear()
                     t0 = t
-                time.sleep(max(0.0, gap - (time.monotonic() - t)))
+                time.sleep(max(0.0, 1 / p["max_fps"] - (time.monotonic() - t)))
             for f in todo:
                 f.result()
     finally:

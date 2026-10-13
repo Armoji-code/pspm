@@ -200,6 +200,19 @@ wayland_capture = ["grim", "-s", "0.5", "-t", "ppm", "-"]
 stick = "pad"
 dead_zone = 24        # stick movement ignored around the middle, of 128
 mouse_speed = 12      # pixels per 1/60 s with the stick pushed all the way
+# The quality preset picked in PSPM Screen's menu on the PSP overrides quality, max_fps and captures above.
+[cast.presets.best_quality]
+quality = 92
+max_fps = 20
+captures = 4
+[cast.presets.balanced]
+quality = 80
+max_fps = 30
+captures = 4
+[cast.presets.best_fps]
+quality = 55
+max_fps = 60
+captures = 8
 [cast.buttons]
 cross = "pad_a"
 circle = "pad_b"
