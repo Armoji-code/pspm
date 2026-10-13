@@ -193,11 +193,11 @@ quality = 80          # JPEG quality of each frame; the PSP decodes them in hard
 # Wayland (wlroots: Sway, Hyprland...) capture; -s 0.5 halves the size, -o <output> picks one of several screens.
 # X11 and Windows use Pillow's ImageGrab.
 wayland_capture = ["grim", "-s", "0.5", "-t", "ppm", "-"]
-# PSP controls on the PC: each button to a key (a-z, 0-9, space, enter, esc, tab, backspace, shift, ctrl, alt, up,
-# down, left, right, f1-f12), a mouse button (mouse_left/right/middle), a gamepad button (pad_a/b/x/y/lb/rb/select/
-# start/up/down/left/right; Linux only for now) or "none". The stick: "pad", "mouse", "arrows", "wasd" or "none".
-# The Streaming page changes these and keeps your picks in psp_controls.json next to config.toml.
-stick = "pad"
+# PSP controls on the PC, as profiles; SELECT on the PSP steps to the next one. Each button maps to a key (a-z, 0-9,
+# space, enter, esc, tab, backspace, shift, ctrl, alt, up, down, left, right, f1-f12), a mouse button
+# (mouse_left/right/middle), a gamepad button (pad_a/b/x/y/lb/rb/select/start/up/down/left/right; Linux only for now)
+# or "none". The stick: "pad", "mouse", "arrows", "wasd" or "none". The Streaming page edits these, adds profiles
+# (up to 6) and keeps them in psp_controls.json next to config.toml.
 dead_zone = 24        # stick movement ignored around the middle, of 128
 mouse_speed = 12      # pixels per 1/60 s with the stick pushed all the way
 # The quality preset picked in PSPM Screen's menu on the PSP overrides quality, max_fps and captures above.
@@ -213,14 +213,31 @@ captures = 4
 quality = 55
 max_fps = 60
 captures = 8
-[cast.buttons]
+[[cast.profiles]]
+name = "DESKTOP"
+stick = "mouse"
+[cast.profiles.buttons]
+l = "mouse_left"
+r = "mouse_right"
+cross = "enter"
+square = "backspace"
+triangle = "ctrl"
+circle = "shift"
+start = "esc"
+up = "up"
+down = "down"
+left = "left"
+right = "right"
+[[cast.profiles]]
+name = "GAMING"
+stick = "pad"
+[cast.profiles.buttons]
 cross = "pad_a"
 circle = "pad_b"
 square = "pad_x"
 triangle = "pad_y"
 l = "pad_lb"
 r = "pad_rb"
-select = "pad_select"
 start = "pad_start"
 up = "pad_up"
 down = "pad_down"

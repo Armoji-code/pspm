@@ -11,7 +11,7 @@ from pspm import cast, config, device, platform
 def test_frame_is_header_then_letterboxed_jpeg():
     data = cast.frame(Image.new("RGB", (48, 48), (255, 128, 8)), 80)  # square: black bars left and right
     size = struct.unpack_from("<I", data, 8)[0]
-    assert data[:8] == b"PSPMSCR2" and len(data) % 512 == 0 and 512 + size <= len(data) < 1024 + size
+    assert data[:8] == b"PSPMSCR2" and data[12] == 0 and len(data) % 512 == 0 and 512 + size <= len(data) < 1024 + size
     pic = Image.open(io.BytesIO(data[512:512 + size]))
     assert pic.size == (480, 272) and pic.format == "JPEG" and not pic.info.get("progressive")
     assert pic.getpixel((0, 0)) == (0, 0, 0) and abs(pic.getpixel((240, 136))[0] - 255) < 8
@@ -63,7 +63,7 @@ def test_send_writes_frames_and_maps_psp_buttons_until_stopped(tmp_path, monkeyp
     monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
     monkeypatch.setattr(platform.current(), "capture", lambda c: Image.new("RGB", (640, 480)), raising=False)
     monkeypatch.setattr(platform.current(), "Input", Input)
-    m = {"buttons": {"cross": "space"}, "stick": "pad"}
+    m = {"active": 0, "profiles": [{"name": "A", "buttons": {"cross": "space"}, "stick": "pad"}]}
     cast.send(cfg, lambda: len(sent) >= 3 and not pad, pressed=lambda *s: seen.append(s), m=m)
     assert sent[:3] == [(cfg["cast"]["endpoint"], b"PSPMSCR2")] * 3
     assert did == [("space", True), ("space", False), "closed"] and seen == [(0x4000, 128, 128), (0, 128, 128)]
@@ -129,7 +129,7 @@ def test_slow_capture_runs_in_parallel(tmp_path, monkeypatch):
     monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
     monkeypatch.setattr(platform.current(), "capture", capture, raising=False)
     monkeypatch.setattr(platform.current(), "Input", Input)
-    cast.send(cfg, lambda: len(sent) >= 12, m={"buttons": {}, "stick": "pad"})
+    cast.send(cfg, lambda: len(sent) >= 12, m={"active": 0, "profiles": [{"name": "A", "buttons": {}, "stick": "pad"}]})
     assert len(sent) >= 12 and max(most) >= 2  # grabs overlap (how many depends on thread start-up timing)
 
 
@@ -162,8 +162,13 @@ def test_psp_preset_picks_quality(tmp_path, monkeypatch):
             pass
 
     monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
-    monkeypatch.setattr(cast, "frame", lambda img, q: used.append(q) or b"")
+    monkeypatch.setattr(cast, "frame", lambda img, q, note: used.append(q) or b"")
     monkeypatch.setattr(platform.current(), "capture", lambda c: Image.new("RGB", (8, 8)), raising=False)
     monkeypatch.setattr(platform.current(), "Input", Input)
-    cast.send(cfg, lambda: len(used) > 5 and not pad, m={"buttons": {}, "stick": "pad"})
+    cast.send(cfg, lambda: len(used) > 5 and not pad, m={"active": 0, "profiles": [{"name": "A", "buttons": {}, "stick": "pad"}]})
     assert used[-1] == cfg["cast"]["presets"]["best_fps"]["quality"]
+
+
+def test_frame_carries_a_note():
+    data = cast.frame(Image.new("RGB", (8, 8)), 80, "CONTROLS: GAMING")
+    assert data[12:29] == b"CONTROLS: GAMING\0"

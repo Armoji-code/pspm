@@ -1,6 +1,7 @@
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QInputDialog,
@@ -28,7 +29,7 @@ LINUX: THE FIRST START ASKS FOR YOUR PASSWORD ONCE TO ALLOW THE PSP'S USB."""
 CAST_STEPS = """PC TO PSP
 1. WITH THE PSP IN USB MODE, PRESS INSTALL PSP APP.
 2. LEAVE USB MODE, KEEP THE CABLE IN, AND START PSPM SCREEN ON THE PSP.
-3. PICK A QUALITY IN PSPM SCREEN AND PRESS ✕, THEN PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; ITS BUTTONS AND STICK CONTROL THE PC. HOME ON THE PSP QUITS.
+3. PICK A QUALITY IN PSPM SCREEN AND PRESS ✕, THEN PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; ITS BUTTONS AND STICK CONTROL THE PC; SELECT SWITCHES BETWEEN THE CONTROLS PROFILES BELOW. HOME ON THE PSP QUITS.
 
 REMOTEJOYLITE BLOCKS THIS WHILE IT'S ON FOR GAMES: REMOVE PLUGIN AND RESTART THE PSP FIRST.
 LINUX: WAYLAND NEEDS GRIM (SWAY, HYPRLAND...; THE SETUP PAGE INSTALLS IT).
@@ -41,6 +42,7 @@ def _name(target):
 
 class StreamPage(QWidget):
     pad_state = Signal(int, int, int)  # from the sending thread: what the PSP's buttons and stick are doing
+    switched = Signal(str)  # from the sending thread: SELECT on the PSP moved to another controls profile
 
     def __init__(self, cfg):
         super().__init__()
@@ -77,6 +79,17 @@ class StreamPage(QWidget):
         self.psp = PspView(cfg["themes"][cfg["app"]["theme"]])
         self.psp.picked.connect(self.pick)
         self.pad_state.connect(self.psp.set_state)
+        self.switched.connect(lambda _: self._saved())  # remember the profile SELECT picked
+        self.profile = QComboBox()
+        self.profile.activated.connect(self.use_profile)
+        prof_row = QHBoxLayout()
+        prof_row.addWidget(QLabel("CONTROLS PROFILE (SELECT ON THE PSP SWITCHES)"))
+        prof_row.addWidget(self.profile, 1)
+        for text, fn in [("ADD", self.add_profile), ("RENAME", self.rename_profile), ("DELETE", self.delete_profile)]:
+            b = QPushButton(text)
+            b.clicked.connect(lambda _=False, fn=fn: fn())
+            prof_row.addWidget(b)
+        col.addLayout(prof_row)
         self.legend = QGridLayout()
         self.legend.setHorizontalSpacing(16)
         self.legend.setRowStretch(7, 1)  # rows at the top
@@ -152,7 +165,7 @@ class StreamPage(QWidget):
         self._cast(lambda: cast.send(self.cfg, lambda: not self.sending,
                                      lambda n, ms, preset: self.cast_job.step.emit(
                                          f"SENDING · {_name(preset)} · {n} FPS · CAPTURE {ms} MS"),
-                                     password, self.controls, self.pad_state.emit),
+                                     password, self.controls, self.pad_state.emit, self.switched.emit),
                    "CONNECTING TO THE PSP…", lambda _: self.cast_status.setText("STOPPED"))
 
     def stop_sending(self):
@@ -186,12 +199,51 @@ class StreamPage(QWidget):
                 target.setObjectName(f"target_{n}")
                 self.legend.addWidget(name, i % 7, i // 7 * 2)
                 self.legend.addWidget(target, i % 7, i // 7 * 2 + 1)
+        p = controls.current(self.controls)
         for n in [*controls.BUTTONS, "stick"]:
-            target = self.controls["stick"] if n == "stick" else self.controls["buttons"].get(n, "none")
+            target = p["stick"] if n == "stick" else "next profile" if n == controls.SWITCH else p["buttons"].get(n, "none")
             self.findChild(QLabel, f"target_{n}").setText(_name(target))
+        self.profile.clear()
+        self.profile.addItems([q["name"] for q in self.controls["profiles"]])
+        self.profile.setCurrentIndex(self.controls["active"])
+
+    def use_profile(self, i):
+        self.controls["active"] = i
+        self._saved()
+
+    def add_profile(self):
+        if len(self.controls["profiles"]) >= controls.MAX_PROFILES:
+            return self.cast_status.setText(f"[UP TO {controls.MAX_PROFILES} PROFILES]")
+        name, ok = QInputDialog.getText(self, "Controls profile", "Name of the new profile (a copy of this one):")
+        if ok and name.strip():
+            p = controls.current(self.controls)
+            self.controls["profiles"].append({"name": name.strip().upper(), "buttons": dict(p["buttons"]),
+                                              "stick": p["stick"]})
+            self.controls["active"] = len(self.controls["profiles"]) - 1
+            self._saved()
+
+    def rename_profile(self):
+        p = controls.current(self.controls)
+        name, ok = QInputDialog.getText(self, "Controls profile", "New name:", text=p["name"])
+        if ok and name.strip():
+            p["name"] = name.strip().upper()
+            self._saved()
+
+    def delete_profile(self):
+        if len(self.controls["profiles"]) > 1:
+            del self.controls["profiles"][self.controls["active"]]
+            self.controls["active"] = 0
+            self._saved()
+
+    def _saved(self):
+        controls.save(self.controls)
+        self.show_controls()
 
     def pick(self, name, where):
-        """A menu of what the clicked PSP control can do; the pick is saved and used at once, even while sending."""
+        """A menu of what the clicked PSP control can do in this profile; the pick is saved and used at once, even
+        while sending."""
+        if name == controls.SWITCH:
+            return
         menu = QMenu(self)
         if name == "stick":
             groups = {"": [f"stick:{m}" for m in controls.STICK]}
@@ -209,12 +261,12 @@ class StreamPage(QWidget):
         menu.exec(where)
 
     def assign(self, name, target):
+        p = controls.current(self.controls)
         if target.startswith("stick:"):
-            self.controls["stick"] = target.removeprefix("stick:")
+            p["stick"] = target.removeprefix("stick:")
         else:
-            self.controls["buttons"][name] = target
-        controls.save(self.controls)
-        self.show_controls()
+            p["buttons"][name] = target
+        self._saved()
 
 
 class _Feature:
