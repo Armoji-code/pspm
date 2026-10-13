@@ -76,6 +76,7 @@ def test_open_says_how_to_start_the_psp_app(tmp_path, monkeypatch):
     monkeypatch.setattr(cast.stream.tools, "ROOT", tmp_path)
     monkeypatch.setattr(platform.current(), "stream_ready", lambda rule, pw: None)
     monkeypatch.setattr(usb.core, "find", lambda **kw: None)
+    monkeypatch.setattr(cast, "find_psp", lambda c: None)
     with pytest.raises(OSError, match="PSPM SCREEN"):
         cast.open_psp(cfg)
     assert "01c9" in (tmp_path / "60-psp-b-usb.rules").read_text() and "uinput" in (tmp_path / "60-psp-b-usb.rules").read_text()
@@ -220,3 +221,34 @@ def test_note_button_turns_on_pc_sound(tmp_path, monkeypatch):
               m={"active": 0, "profiles": [{"name": "A", "buttons": {}, "stick": "pad"}]})
     aud = next(s for s in sent if s != "closed" and s[:8] == b"PSPMAUD1")
     assert struct.unpack_from("<II", aud, 8) == (cfg["cast"]["audio_block"], 22050) and sent[-1] == "closed"
+
+
+def test_wifi_streams_over_tcp_when_no_cable(tmp_path, monkeypatch):
+    import socket
+    import threading
+
+    import usb.core
+
+    server = socket.create_server(("127.0.0.1", 0))
+    got = []
+
+    def psp():
+        conn, _ = server.accept()
+        conn.sendall(b"PSPMPAD1" + bytes(4) + bytes([128, 128, 2, 0]) + b"PSPMPA")  # one and a bit
+        got.append(conn.recv(512))
+        conn.close()
+
+    threading.Thread(target=psp, daemon=True).start()
+    cfg = config.load(tmp_path / "x")
+    cfg["cast"] |= {"wifi_host": "127.0.0.1", "wifi_port": server.getsockname()[1]}
+    monkeypatch.setattr(cast.stream.tools, "ROOT", tmp_path)
+    monkeypatch.setattr(platform.current(), "stream_ready", lambda rule, pw: None)
+    monkeypatch.setattr(usb.core, "find", lambda **kw: None)
+    net = cast.open_psp(cfg)
+    assert net.read(0x81, 512, 1000)[14] == 2
+    with pytest.raises(usb.core.USBTimeoutError):
+        net.read(0x81, 512, 50)  # half a packet waits for the rest
+    net.write(0x02, cast.frame(Image.new("RGB", (480, 272)), 80))
+    with pytest.raises(usb.core.USBError):
+        net.read(0x81, 512, 1000)  # the PSP hung up
+    assert got[0].startswith(b"PSPMSCR2")
