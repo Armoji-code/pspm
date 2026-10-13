@@ -252,3 +252,21 @@ def test_wifi_streams_over_tcp_when_no_cable(tmp_path, monkeypatch):
     with pytest.raises(usb.core.USBError):
         net.read(0x81, 512, 1000)  # the PSP hung up
     assert got[0].startswith(b"PSPMSCR2")
+
+
+def test_view_draws_the_pointer_and_zooms_around_it():
+    img = Image.new("RGB", (1920, 1080), "blue")
+    whole = cast.view(img, (0.5, 0.5))
+    assert whole.size == (1920, 1080) and whole.getpixel((972, 580)) == (255, 255, 255)  # 4x: 16 px on the PSP
+    assert cast.view(img).getpixel((972, 580)) == (0, 0, 255)  # no pointer known: none drawn
+    near = cast.view(img, (0.99, 0.01), 2)  # the crop stays on screen, the pointer near its corner
+    assert near.size == (960, 544) and near.getpixel((1900 - 960 + 6, 11 + 20)) == (255, 255, 255)
+    assert cast.view(img, None, 3).size == (640, 362)
+
+
+@pytest.mark.skipif(not hasattr(platform.current(), "_Proc"), reason="Linux recorder")
+def test_sound_recorder_that_quits_says_why():
+    rec = platform.current()._Proc(["sh", "-c", "echo 'Connection refused' >&2"])
+    with pytest.raises(OSError, match="Connection refused"):
+        rec.read(4096)
+    rec.close()

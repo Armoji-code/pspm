@@ -72,3 +72,13 @@ def test_select_steps_through_profiles(tmp_path):
     for b in (cross, 0, sel, sel, 0, cross, 0, sel, 0):  # held SELECT counts once
         mp.update(b, 128, 128)
     assert names == ["GAMING", "DESKTOP"] and ("enter", True) in out.log and ("pad_a", True) in out.log
+
+
+def test_select_start_zooms_instead_of_switching(tmp_path):
+    cfg = config.load(tmp_path / "x")
+    m, out, names, zooms = controls.load(cfg, tmp_path / "c.json"), Out(), [], []
+    mp = controls.Mapper(m, out, cfg["cast"], names.append, lambda: zooms.append(1))
+    sel, start = controls.BUTTONS["select"], controls.BUTTONS["start"]
+    for b in (sel, sel | start, sel, sel | start, 0, start, 0):
+        mp.update(b, 128, 128)
+    assert zooms == [1, 1] and names == [] and out.log.count(("esc", True)) == 1  # only the lone START

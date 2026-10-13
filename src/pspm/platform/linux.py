@@ -85,10 +85,13 @@ def capture(c: dict):
 
 class _Proc:
     def __init__(self, cmd):
-        self.p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self.p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def read(self, n: int) -> bytes:
-        return self.p.stdout.read(n)
+        data = self.p.stdout.read(n)
+        if not data:  # it quit: say why
+            raise OSError(self.p.stderr.read().decode(errors="replace").strip() or f"{self.p.args[0]} stopped")
+        return data
 
     def close(self) -> None:
         self.p.kill()
@@ -112,8 +115,9 @@ _PAD = {"pad_a": 0x130, "pad_b": 0x131, "pad_y": 0x133, "pad_x": 0x134, "pad_lb"
         "pad_right": 0x223}
 
 
-def _uinput(name: str, keys, axes: dict) -> int:
-    """A virtual device with these key codes and axes {type: [codes]}; returns its fd."""
+def _uinput(name: str, keys, axes: dict, span=(-128, 127, 8)) -> int:
+    """A virtual device with these key codes and axes {type: [codes]}; absolute axes go over span (min, max,
+    flat middle). Returns its fd."""
     import fcntl
     import struct
 
@@ -128,19 +132,22 @@ def _uinput(name: str, keys, axes: dict) -> int:
         fcntl.ioctl(fd, 0x40045564, kind)
         for a in codes:
             fcntl.ioctl(fd, 0x40045566 if kind == 2 else 0x40045567, a)  # UI_SET_RELBIT / UI_SET_ABSBIT
-            if kind == 3:  # UI_ABS_SETUP: -128..127, small flat middle
-                fcntl.ioctl(fd, 0x401C5504, struct.pack("=H2x6i", a, 0, -128, 127, 0, 8, 0))
+            if kind == 3:  # UI_ABS_SETUP
+                fcntl.ioctl(fd, 0x401C5504, struct.pack("=H2x6i", a, 0, span[0], span[1], 0, span[2], 0))
     fcntl.ioctl(fd, 0x405C5503, struct.pack("=4H80sI", 6, 0, 0, 1, name.encode(), 0))  # UI_DEV_SETUP, BUS_VIRTUAL
     fcntl.ioctl(fd, 0x5501)  # UI_DEV_CREATE
     return fd
 
 
 class Input:
-    """Two devices: keyboard + mouse, and a gamepad (games and Steam treat a device that is also a keyboard badly)."""
+    """Two devices: keyboard + mouse, and a gamepad (games and Steam treat a device that is also a keyboard badly).
+    The mouse moves to absolute positions, so PSPM knows where the pointer is (Wayland won't tell) to draw it on the
+    PSP and zoom there. move() steps are in pixels of a 1920-wide screen."""
 
     def __init__(self, name: str):
-        self.kbd = _uinput(f"{name} keyboard", _KEYS.values(), {2: [0, 1]})  # REL_X, REL_Y
-        self.pad = _uinput(f"{name} gamepad", _PAD.values(), {3: [0, 1]})  # ABS_X, ABS_Y
+        self.kbd = _uinput(f"{name} keyboard", _KEYS.values(), {3: [0, 1]}, (0, 65535, 0))  # ABS_X, ABS_Y
+        self.pad = _uinput(f"{name} gamepad", _PAD.values(), {3: [0, 1]})
+        self.at = None  # pointer position, 0-1 across the screen, once the PSP moved it
 
     def _emit(self, fd: int, *events) -> None:
         import struct
@@ -155,7 +162,12 @@ class Input:
         self._emit(self.pad, (3, 0, x), (3, 1, y))
 
     def move(self, dx: int, dy: int) -> None:
-        self._emit(self.kbd, (2, 0, dx), (2, 1, dy))
+        x, y = self.at or (0.5, 0.5)
+        self.at = min(1.0, max(0.0, x + dx / 1920)), min(1.0, max(0.0, y + dy / 1080))
+        self._emit(self.kbd, (3, 0, round(self.at[0] * 65535)), (3, 1, round(self.at[1] * 65535)))
+
+    def pointer(self) -> tuple[float, float] | None:
+        return self.at
 
     def close(self) -> None:
         import fcntl
