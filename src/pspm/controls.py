@@ -16,13 +16,23 @@ PAD = ["pad_a", "pad_b", "pad_x", "pad_y", "pad_lb", "pad_rb", "pad_select", "pa
        "pad_left", "pad_right"]
 STICK = ["pad", "mouse", "arrows", "wasd", "none"]
 _STICK_KEYS = {"arrows": ("left", "right", "up", "down"), "wasd": ("a", "d", "w", "s")}
+MAX_PROFILES = 6
+SWITCH = "select"  # the PSP button that steps to the next profile; it maps to nothing itself
 
 
 def load(cfg: dict, path: Path = FILE) -> dict:
-    """{"buttons": {psp button: target}, "stick": mode}: config defaults, then what was picked on the page."""
+    """{"active": index, "profiles": [{"name", "buttons": {psp button: target}, "stick": mode}]}: what was saved
+    on the page, else the profiles in config ([[cast.profiles]])."""
     saved = json.loads(path.read_text()) if path.exists() else {}
-    return {"buttons": {**cfg["cast"]["buttons"], **saved.get("buttons", {})},
-            "stick": saved.get("stick", cfg["cast"]["stick"])}
+    if not saved.get("profiles"):  # nothing saved yet, or the single mapping from before profiles
+        saved = {"active": 0, "profiles": cfg["cast"]["profiles"]}
+    profiles = [{"name": p["name"], "buttons": {**p.get("buttons", {})}, "stick": p.get("stick", "none")}
+                for p in saved["profiles"][:MAX_PROFILES]]
+    return {"active": min(saved.get("active", 0), len(profiles) - 1), "profiles": profiles}
+
+
+def current(m: dict) -> dict:
+    return m["profiles"][m["active"]]
 
 
 def save(m: dict, path: Path = FILE) -> None:
@@ -36,15 +46,22 @@ def parse(packet: bytes) -> tuple[int, int, int] | None:
 
 
 class Mapper:
-    """Turns each PSP state into key(target, down) / stick(x, y) / move(dx, dy) calls on `out`. Reads the mapping
-    `m` on every update, so changes on the page apply at once."""
+    """Turns each PSP state into key(target, down) / stick(x, y) / move(dx, dy) calls on `out`, with the active
+    profile of `m` (see load). Reads `m` on every update, so changes on the page apply at once. SELECT steps to
+    the next profile and calls switched(name)."""
 
-    def __init__(self, m: dict, out, c: dict):
+    def __init__(self, m: dict, out, c: dict, switched=lambda name: None):
         self.m, self.out, self.dead, self.speed, self.held = m, out, c["dead_zone"], c["mouse_speed"], set()
+        self.switched, self.was = switched, 0
 
     def update(self, buttons: int, lx: int, ly: int) -> None:
-        want = {self.m["buttons"].get(n, "none") for n, bit in BUTTONS.items() if buttons & bit} - {"none"}
-        x, y, mode, d = lx - 128, ly - 128, self.m["stick"], self.dead
+        if buttons & ~self.was & BUTTONS[SWITCH]:
+            self.m["active"] = (self.m["active"] + 1) % len(self.m["profiles"])
+            self.switched(current(self.m)["name"])
+        self.was = buttons
+        p = current(self.m)
+        want = {p["buttons"].get(n, "none") for n, bit in BUTTONS.items() if buttons & bit and n != SWITCH} - {"none"}
+        x, y, mode, d = lx - 128, ly - 128, p["stick"], self.dead
         if mode in _STICK_KEYS:
             left, right, up, down = _STICK_KEYS[mode]
             want |= {k for k, on in ((left, x < -d), (right, x > d), (up, y < -d), (down, y > d)) if on}

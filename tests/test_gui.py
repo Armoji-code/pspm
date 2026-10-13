@@ -404,20 +404,28 @@ def test_files_page_loads_thumbnails_in_background(tmp_path):
 
 
 def test_stream_page_picks_and_shows_psp_controls(tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QLabel
+    from PySide6.QtWidgets import QInputDialog, QLabel
 
     from pspm import controls
     from pspm.features.stream import StreamPage
 
-    saved = {}
-    monkeypatch.setattr(controls, "save", lambda m: saved.update(m))
+    saved = []
+    monkeypatch.setattr(controls, "save", lambda m: saved.append(m))
     QApplication.instance() or QApplication([])
     p = StreamPage(config.load(tmp_path / "x"))
+    assert p.findChild(QLabel, "target_cross").text() == "ENTER" and p.profile.currentText() == "DESKTOP"
+    assert p.findChild(QLabel, "target_select").text() == "NEXT PROFILE"
+    p.use_profile(1)
     assert p.findChild(QLabel, "target_cross").text() == "PAD A"
     p.assign("cross", "space")
     p.assign("stick", "stick:wasd")
     assert p.findChild(QLabel, "target_cross").text() == "SPACE" and p.findChild(QLabel, "target_stick").text() == "WASD"
-    assert saved["buttons"]["cross"] == "space" and saved["stick"] == "wasd"
+    assert controls.current(saved[-1])["buttons"]["cross"] == "space"
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("couch", True))
+    p.add_profile()
+    assert p.profile.currentText() == "COUCH" and p.profile.count() == 3
+    p.delete_profile()
+    assert p.profile.count() == 2
     p.pad_state.emit(controls.BUTTONS["cross"], 0, 255)
     QApplication.processEvents()
     assert p.psp.pressed == controls.BUTTONS["cross"] and p.psp.stick == (0, 255)

@@ -22,7 +22,7 @@ int pspmUsbWrite(const void *src, int size);
 #define W 480
 #define H 272
 #define STRIDE 512
-#define HEAD 512                /* one USB packet before every frame: "PSPMSCR2", then the JPEG's size (u32) */
+#define HEAD 512 /* one USB packet before every frame: "PSPMSCR2", the JPEG's size (u32), a note to show (text) */
 #define MAX_JPEG (256 * 1024)   /* PSPM keeps frames under this */
 #define VRAM ((unsigned *)0x44000000) /* uncached */
 #define BUFS (VRAM + STRIDE * H)      /* two 32-bit buffers after the debug screen's */
@@ -176,6 +176,12 @@ int main(int argc, char *argv[]) {
         unsigned *dst = BUFS + back * STRIDE * H;
         for (int y = 0; y < H; y++)
             memcpy(dst + y * STRIDE, out + y * W, W * 4);
+        if (in[12]) { /* a note from PSPM (e.g. the controls profile SELECT switched to), over the picture */
+            in[HEAD - 1] = 0;
+            pspDebugScreenSetBase((u32 *)dst);
+            pspDebugScreenSetXY(1, 1);
+            pspDebugScreenPrintf("%s", (char *)in + 12);
+        }
         sceDisplaySetFrameBuf(dst, STRIDE, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_NEXTFRAME);
         back ^= 1;
         scePowerTick(0); /* the PC is the input now: don't dim or sleep */

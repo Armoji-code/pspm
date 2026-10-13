@@ -33,9 +33,10 @@ def installed(dev: Device, cfg: dict) -> bool:
     return bool(found) and (found / "pspm_usb.prx").is_file()
 
 
-def frame(img: Image.Image, quality: int) -> bytes:
+def frame(img: Image.Image, quality: int, note: str = "") -> bytes:
     """The image fitted into 480x272 (black bars) as a baseline 4:2:0 JPEG, which the PSP decodes in hardware,
-    after a one-packet header ("PSPMSCR2", size) the PSP finds the next frame by. Padded to whole USB packets."""
+    after a one-packet header ("PSPMSCR2", size, a note the PSP prints over the picture) the PSP finds the next
+    frame by. Padded to whole USB packets."""
     pic = ImageOps.pad(img.convert("RGB"), (W, H), Image.Resampling.BILINEAR)
     for q in (quality, 50, 25):  # a very busy screen at high quality can outgrow the PSP's buffer
         out = io.BytesIO()
@@ -43,7 +44,8 @@ def frame(img: Image.Image, quality: int) -> bytes:
         data = out.getvalue()
         if len(data) <= MAX_JPEG:
             break
-    return (b"PSPMSCR2" + struct.pack("<I", len(data))).ljust(512, b"\0") + data.ljust(-(-len(data) // 512) * 512, b"\0")
+    head = b"PSPMSCR2" + struct.pack("<I", len(data)) + note.encode("ascii", "replace")[:47]
+    return head.ljust(512, b"\0") + data.ljust(-(-len(data) // 512) * 512, b"\0")
 
 
 def open_psp(cfg: dict, password: str | None = None):
@@ -86,14 +88,21 @@ def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> No
 
 
 def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None = None, m: dict | None = None,
-         pressed=lambda buttons, lx, ly: None) -> None:
+         pressed=lambda buttons, lx, ly: None, switched=lambda name: None) -> None:
     """Send the screen until stop() is true, and turn the PSP's controls into PC input with mapping m (see
     controls.load). fps(frames sent, average capture ms, preset name) once a second. The PSP picks the preset;
-    [cast.presets.<name>] overrides quality, max_fps and captures."""
+    [cast.presets.<name>] overrides quality, max_fps and captures. SELECT on the PSP switches the controls profile:
+    switched(name) is called and the PSP shows the name for a moment."""
     c, os_ = cfg["cast"], platform.current()
     psp = open_psp(cfg, password)
     out, ended = os_.Input("PSPM PSP"), threading.Event()
-    mapper = controls.Mapper(m or controls.load(cfg), out, c)
+    note = {"text": "", "until": 0.0}
+
+    def switch(name):
+        note.update(text=f"CONTROLS: {name}", until=time.monotonic() + 2)
+        switched(name)
+
+    mapper = controls.Mapper(m or controls.load(cfg), out, c, switch)
     live = {"preset": "balanced"}
     pad = threading.Thread(target=_pad, args=(psp, c, mapper, lambda: stop() or ended.is_set(), pressed, live),
                            daemon=True)
@@ -117,7 +126,7 @@ def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None =
                 while len(todo) < p["captures"]:
                     todo.append(pool.submit(grab))
                 img = todo.popleft().result()
-                psp.write(c["endpoint"], frame(img, p["quality"]), c["timeout_ms"])
+                psp.write(c["endpoint"], frame(img, p["quality"], note["text"] if t < note["until"] else ""), c["timeout_ms"])
                 if t - t0 >= 1:
                     fps(len(took), round(1000 * sum(took) / max(1, len(took))), live["preset"])
                     took.clear()
