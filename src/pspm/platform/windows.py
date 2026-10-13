@@ -59,6 +59,28 @@ def capture(c: dict):
     return ImageGrab.grab()
 
 
+class _Loopback:
+    def __init__(self, rate: int):
+        import soundcard as sc  # WASAPI loopback; Windows-only dependency
+
+        mic = sc.get_microphone(str(sc.default_speaker().name), include_loopback=True)
+        self.rec = mic.recorder(samplerate=rate, channels=2)
+        self.rec.__enter__()
+
+    def read(self, n: int) -> bytes:
+        import numpy as np
+
+        return (np.clip(self.rec.record(numframes=n // 4), -1, 1) * 32767).astype("<i2").tobytes()
+
+    def close(self) -> None:
+        self.rec.__exit__(None, None, None)
+
+
+def sound(c: dict, rate: int):
+    """What the PC is playing (the default speakers, through WASAPI loopback) as 16-bit stereo PCM at `rate`."""
+    return _Loopback(rate)
+
+
 # PSP controls as keyboard and mouse input through SendInput. Scan codes, so games that read DirectInput see them.
 _VK = {c: ord(c.upper()) for c in "abcdefghijklmnopqrstuvwxyz0123456789"} | {f"f{i}": 0x6F + i for i in range(1, 13)} | {
     "space": 0x20, "enter": 0x0D, "esc": 0x1B, "tab": 0x09, "backspace": 0x08, "shift": 0x10, "ctrl": 0x11,

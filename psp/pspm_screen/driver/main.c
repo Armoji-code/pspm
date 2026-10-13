@@ -4,6 +4,7 @@
 #include <pspsdk.h>
 #include <pspusb.h>
 #include <pspusbbus.h>
+#include <pspctrl.h>
 #include <string.h>
 
 PSP_MODULE_INFO("pspm_usb", PSP_MODULE_KERNEL, 1, 0);
@@ -143,6 +144,15 @@ int pspmUsbWrite(const void *src, int size) {
     int r = transfer(&pout, size, 1);
     pspSdkSetK1(k1);
     return r;
+}
+
+/* All of the PSP's buttons, with the ones user mode can't see (the note button, HOME...). */
+unsigned pspmCtrlButtons(void) {
+    int k1 = pspSdkSetK1(0);
+    SceCtrlData c;
+    sceCtrlPeekBufferPositive(&c, 1);
+    pspSdkSetK1(k1);
+    return c.Buttons;
 }
 
 int module_start(SceSize args, void *argp) {

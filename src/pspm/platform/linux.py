@@ -83,6 +83,24 @@ def capture(c: dict):
     return ImageGrab.grab()
 
 
+class _Proc:
+    def __init__(self, cmd):
+        self.p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    def read(self, n: int) -> bytes:
+        return self.p.stdout.read(n)
+
+    def close(self) -> None:
+        self.p.kill()
+        self.p.wait()
+
+
+def sound(c: dict, rate: int):
+    """What the PC is playing, as 16-bit stereo PCM at `rate`: read(n) bytes, close(). parec records the default
+    output's monitor on PulseAudio and PipeWire."""
+    return _Proc([a.format(rate=rate) for a in c["audio_capture"]])
+
+
 # PSP controls as Linux input devices through /dev/uinput (allowed by the udev rule above). Codes from linux/input.h.
 _KEYS = {c: n for row, first in (("qwertyuiop", 16), ("asdfghjkl", 30), ("zxcvbnm", 44)) for n, c in enumerate(row, first)}
 _KEYS |= {str(i % 10): i + 1 for i in range(1, 11)} | {f"f{i}": 58 + i for i in range(1, 11)} | {

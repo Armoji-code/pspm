@@ -7,6 +7,7 @@
 #include <pspiofilemgr.h>
 #include <pspjpeg.h>
 #include <psppower.h>
+#include <pspaudio.h>
 #include <psputility.h>
 #include <kubridge.h> /* kuKernelLoadModule loads the kernel driver; from the CFW (ARK, PRO, ME) */
 #include <stdio.h>
@@ -18,6 +19,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
 int pspmUsbStart(void);
 int pspmUsbRead(void *dst, int size);
 int pspmUsbWrite(const void *src, int size);
+unsigned pspmCtrlButtons(void);
 
 #define W 480
 #define H 272
@@ -30,6 +32,19 @@ int pspmUsbWrite(const void *src, int size);
 /* Picked in the menu, sent to the PC in every pad packet, kept in settings.bin next to the EBOOT. */
 static const char *PRESETS[] = {"BEST QUALITY", "BALANCED", "BEST FPS"};
 static volatile int preset = 1;
+
+/* The note button cycles the PC's sound: off, on (22 kHz), best (44 kHz). Sent in every pad packet. */
+static const char *AUDIO[] = {"AUDIO: OFF", "AUDIO: ON", "AUDIO: BEST"};
+static volatile int audio = 0;
+static volatile unsigned shown; /* until when (sceKernelGetSystemTimeLow) the PSP's own note shows */
+static const char *note;
+
+/* Sound from the PC ("PSPMAUD1", size, sample rate; 16-bit stereo PCM) waits here for the audio thread. */
+#define RING (64 * 1024)
+#define BLOCK 1024 /* stereo samples per output call */
+static short ring[RING / 2];
+static volatile unsigned head, tail; /* bytes written / played, free-running */
+static volatile int rate;
 
 static unsigned char in[HEAD + MAX_JPEG] __attribute__((aligned(64)));
 static unsigned out[W * H] __attribute__((aligned(64)));
@@ -46,9 +61,10 @@ static int callbacks(SceSize args, void *argp) {
 }
 
 /* Buttons and stick to the PC, 60 times a second: "PSPMPAD1", buttons (u32), stick x, y (0-255, 128 = middle),
-   quality preset (0 best quality, 1 balanced, 2 best FPS). */
+   quality preset (0 best quality, 1 balanced, 2 best FPS), audio (0 off, 1 on, 2 best). */
 static int pad(SceSize args, void *argp) {
     unsigned char msg[16] __attribute__((aligned(64))) = "PSPMPAD1";
+    unsigned was = ~0u;
     SceCtrlData c;
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
@@ -58,8 +74,50 @@ static int pad(SceSize args, void *argp) {
         msg[12] = c.Lx;
         msg[13] = c.Ly;
         msg[14] = preset;
+        unsigned all = pspmCtrlButtons(), now = all & ~was;
+        was = all;
+        if (now & PSP_CTRL_NOTE) {
+            audio = (audio + 1) % 3;
+            note = AUDIO[audio];
+            shown = sceKernelGetSystemTimeLow() + 2000000;
+        }
+        msg[15] = audio;
         if (pspmUsbWrite(msg, sizeof msg) < 0)
             sceKernelDelayThread(100 * 1000); /* PC not reading yet */
+    }
+    return 0;
+}
+
+/* Plays what the PC sends; silence while nothing is queued, so a late packet only drops sound. */
+static int sound(SceSize args, void *argp) {
+    static short block[BLOCK * 2] __attribute__((aligned(64)));
+    int ch = -1, at = 0;
+    for (;;) {
+        if (!audio || !rate) {
+            if (ch >= 0)
+                sceAudioSRCChRelease();
+            ch = -1;
+            tail = head;
+            sceKernelDelayThread(50 * 1000);
+            continue;
+        }
+        if (ch < 0 || at != rate) {
+            if (ch >= 0)
+                sceAudioSRCChRelease();
+            at = rate;
+            ch = sceAudioSRCChReserve(BLOCK, at, 2);
+            if (ch < 0) {
+                sceKernelDelayThread(100 * 1000);
+                continue;
+            }
+        }
+        if (head - tail >= sizeof block) {
+            for (unsigned i = 0; i < sizeof block; i += 2)
+                block[i / 2] = ring[((tail + i) % RING) / 2];
+            tail += sizeof block;
+        } else
+            memset(block, 0, sizeof block);
+        sceAudioSRCOutputBlocking(PSP_AUDIO_VOLUME_MAX, block);
     }
     return 0;
 }
@@ -153,6 +211,7 @@ int main(int argc, char *argv[]) {
         stop("Could not start USB (%08x).\nIf RemoteJoyLite is on for games, turn it off\n"
              "(PSPM: STREAMING > REMOVE PLUGIN) and restart the PSP.", r);
     start("pad", pad, 0x12);
+    start("sound", sound, 0x10);
     pspDebugScreenPrintf("Waiting for the PC.\nIn PSPM: STREAMING > START SENDING.\n\nHOME quits.");
 
     int back = 0;
@@ -161,10 +220,21 @@ int main(int argc, char *argv[]) {
             sceKernelDelayThread(100 * 1000);
             continue;
         }
-        if (memcmp(in, "PSPMSCR2", 8))
-            continue; /* joined mid-frame: skip packets until the next header */
         unsigned size;
         memcpy(&size, in + 8, 4);
+        if (!memcmp(in, "PSPMAUD1", 8)) {
+            if (size > MAX_JPEG || pspmUsbRead(in + HEAD, (size + 511) & ~511) < 0)
+                continue;
+            memcpy((void *)&rate, in + 12, 4);
+            if (head - tail + size > RING / 2) /* falling behind: drop the oldest instead of adding delay */
+                tail = head + size - RING / 4;
+            for (unsigned i = 0; i < size; i += 2)
+                ring[((head + i) % RING) / 2] = *(short *)(in + HEAD + i);
+            head += size & ~3u;
+            continue;
+        }
+        if (memcmp(in, "PSPMSCR2", 8))
+            continue; /* joined mid-frame: skip packets until the next header */
         if (size > MAX_JPEG || pspmUsbRead(in + HEAD, (size + 511) & ~511) < 0)
             continue;
         /* the decoder reads and writes memory directly, past the CPU cache */
@@ -176,11 +246,13 @@ int main(int argc, char *argv[]) {
         unsigned *dst = BUFS + back * STRIDE * H;
         for (int y = 0; y < H; y++)
             memcpy(dst + y * STRIDE, out + y * W, W * 4);
-        if (in[12]) { /* a note from PSPM (e.g. the controls profile SELECT switched to), over the picture */
-            in[HEAD - 1] = 0;
+        in[HEAD - 1] = 0;
+        const char *say = in[12] ? (char *)in + 12 : /* a note from PSPM, e.g. the profile SELECT switched to */
+                          (int)(shown - sceKernelGetSystemTimeLow()) > 0 ? note : NULL;
+        if (say) {
             pspDebugScreenSetBase((u32 *)dst);
             pspDebugScreenSetXY(1, 1);
-            pspDebugScreenPrintf("%s", (char *)in + 12);
+            pspDebugScreenPrintf("%s", say);
         }
         sceDisplaySetFrameBuf(dst, STRIDE, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_NEXTFRAME);
         back ^= 1;

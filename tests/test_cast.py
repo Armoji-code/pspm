@@ -172,3 +172,51 @@ def test_psp_preset_picks_quality(tmp_path, monkeypatch):
 def test_frame_carries_a_note():
     data = cast.frame(Image.new("RGB", (8, 8)), 80, "CONTROLS: GAMING")
     assert data[12:29] == b"CONTROLS: GAMING\0"
+
+
+def test_note_button_turns_on_pc_sound(tmp_path, monkeypatch):
+    cfg = config.load(tmp_path / "x")
+    sent, pad = [], [b"PSPMPAD1" + struct.pack("<IBBBB", 0, 128, 128, 1, 1)]
+
+    class Psp:
+        def write(self, ep, data, timeout):
+            sent.append(bytes(data[:16]))
+
+        def read(self, ep, size, timeout):
+            import usb.core
+
+            if not pad:
+                raise usb.core.USBTimeoutError("timeout")
+            return pad.pop(0)
+
+    class Sound:
+        def __init__(self, c, rate):
+            self.rate = rate
+
+        def read(self, n):
+            return bytes(n)
+
+        def close(self):
+            sent.append("closed")
+
+    class Input:
+        def __init__(self, name):
+            pass
+
+        def key(self, t, down):
+            pass
+
+        def stick(self, x, y):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
+    monkeypatch.setattr(platform.current(), "sound", Sound, raising=False)
+    monkeypatch.setattr(platform.current(), "capture", lambda c: Image.new("RGB", (8, 8)), raising=False)
+    monkeypatch.setattr(platform.current(), "Input", Input)
+    cast.send(cfg, lambda: any(s[:8] == b"PSPMAUD1" for s in sent if s != "closed"),
+              m={"active": 0, "profiles": [{"name": "A", "buttons": {}, "stick": "pad"}]})
+    aud = next(s for s in sent if s != "closed" and s[:8] == b"PSPMAUD1")
+    assert struct.unpack_from("<II", aud, 8) == (cfg["cast"]["audio_block"], 22050) and sent[-1] == "closed"
