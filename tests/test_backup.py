@@ -89,9 +89,12 @@ def test_drive_creates_folders_then_uploads(monkeypatch):
         ("GET", "https://A/files"), ("POST", "https://A/files"),  # PSPM folder: not found, created
         ("GET", "https://A/files"), ("POST", "https://A/files"),  # SAVE folder
         ("GET", "https://A/files"),  # the file itself: not there yet
-        ("POST", "https://U/files", {"name": "DATA.BIN", "parents": ["id4"]}),
-        ("PUT", "https://upload/session"),
+        ("POST", "https://U/files"),  # small: name and content in one request
     ]
+    calls.clear()
+    g.SMALL = 0  # big files go up resumable
+    g.put("PSPM/SAVE/BIG.BIN", io.BytesIO(b"x"), 1)
+    assert calls[1:] == [("POST", "https://U/files", {"name": "BIG.BIN", "parents": ["id4"]}), ("PUT", "https://upload/session")]
 
 
 class Cloud(Fake):

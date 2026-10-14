@@ -14,11 +14,13 @@ import http.server
 import json
 import secrets
 import shutil
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import ClassVar
@@ -126,6 +128,9 @@ class GoogleDrive(Provider):
     auth_extra: ClassVar[dict] = {"scope": "https://www.googleapis.com/auth/drive.file", "access_type": "offline", "prompt": "consent"}
     FOLDER = "application/vnd.google-apps.folder"
 
+    SMALL = 5 << 20  # up to this size a file goes up in one request
+    lock = threading.Lock()  # uploads run in parallel: one thread at a time looks up or makes folders
+
     def __init__(self, pcfg, refresh_token):
         super().__init__(pcfg, refresh_token)
         self.dirs = {}
@@ -141,6 +146,10 @@ class GoogleDrive(Provider):
         return found[0]["id"] if found else None
 
     def _folder(self, parts):
+        with self.lock:
+            return self._folder_locked(parts)
+
+    def _folder_locked(self, parts):
         pid = "root"
         for i, name in enumerate(parts):
             key = "/".join(parts[: i + 1])
@@ -156,6 +165,17 @@ class GoogleDrive(Provider):
         *parts, name = path.split("/")
         parent = self._folder(parts)
         fid = self._find(name, parent)
+        if size <= self.SMALL:  # one request: the content alone to update, metadata + content to create
+            data, url = f.read(), f"{self.cfg['upload_url']}/files"
+            if fid:
+                _http(f"{url}/{fid}?uploadType=media", data, self.auth, "PATCH")
+                return
+            b = secrets.token_hex(8)
+            meta = json.dumps({"name": name, "parents": [parent]})
+            body = (f"--{b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{meta}\r\n"
+                    f"--{b}\r\nContent-Type: application/octet-stream\r\n\r\n").encode() + data + f"\r\n--{b}--".encode()
+            _http(f"{url}?uploadType=multipart", body, {**self.auth, "Content-Type": f"multipart/related; boundary={b}"})
+            return
         meta = {} if fid else {"name": name, "parents": [parent]}
         url = f"{self.cfg['upload_url']}/files" + (f"/{fid}" if fid else "") + "?uploadType=resumable"
         h = {**self.auth, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Length": str(size)}
@@ -283,18 +303,25 @@ def pending(files: dict[str, Path], done: dict) -> list[str]:
 
 
 def run(provider: Provider, files: dict[str, Path], done: dict, remote: str, save=lambda: None,
-        progress=lambda text: None) -> int:
-    """Upload every new or changed file; `done` (rel -> signature) is updated and saved after each one,
-    so an unplug mid-backup keeps what already went up."""
-    todo = pending(files, done)
-    for i, rel in enumerate(todo, 1):
-        progress(f"{i}/{len(todo)} {rel}")
+        progress=lambda text: None, workers: int = 4) -> int:
+    """Upload every new or changed file, `workers` at a time (saves are many small files, so the time goes on
+    round trips, not bytes); `done` (rel -> signature) is updated and saved after each one, so an unplug
+    mid-backup keeps what already went up."""
+    todo, lock, n = pending(files, done), threading.Lock(), [0]
+
+    def one(rel):
         p = files[rel]
         sig = _sig(p)
         with p.open("rb") as f:
             provider.put(f"{remote}/{rel}", f, sig[0])
-        done[rel] = sig
-        save()
+        with lock:
+            n[0] += 1
+            progress(f"{n[0]}/{len(todo)} {rel}")
+            done[rel] = sig
+            save()
+
+    with ThreadPoolExecutor(workers) as pool:
+        list(pool.map(one, todo))  # list(): re-raises the first failure
     return len(todo)
 
 
