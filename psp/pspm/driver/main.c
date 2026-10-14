@@ -86,12 +86,13 @@ static const unsigned char hid_desc[9] = {9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeo
 static struct UsbEndpoint dendp[4] = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {3, 0, 0}};
 static struct UsbInterface dintf = {0xFFFFFFFF, 0, 2};
 static int hid = 1; /* 0: the drive alone, buttons in the tail */
-static struct DeviceDescriptor ddev[2] __attribute__((aligned(16))); /* [0] high speed, [1] full speed */
+static unsigned char ddev[2][32] __attribute__((aligned(16))); /* [0] high speed, [1] full speed; 18 bytes each,
+                                                                  but every descriptor must start on its own 16 */
 static struct epd depd[2][3] __attribute__((aligned(16)));
-static struct ifd difd[2][2];
-static struct sets dsets[2][2];
-static struct cfd dcfd[2];
-static struct conf dconf[2];
+static struct ifd difd[2][2] __attribute__((aligned(16)));
+static struct sets dsets[2][2] __attribute__((aligned(16)));
+static struct cfd dcfd[2] __attribute__((aligned(16)));
+static struct conf dconf[2] __attribute__((aligned(16)));
 
 static int drive_start(int size, void *args) {
     for (int s = 0; s < 2; s++) {
@@ -116,9 +117,9 @@ static int drive_start(int size, void *args) {
         memcpy(dcfd[s].d, c, 9);
         dcfd[s].s = dsets[s];
         dconf[s] = (struct conf){&dcfd[s], dsets[s], difd[s], depd[s]};
-        ddev[s] = dev;
-        ddev[s].bcdUSB = s ? 0x110 : 0x200;
-        ddev[s].bcdDevice = 0x300;
+        struct DeviceDescriptor d = dev;
+        d.bcdDevice = 0x300;
+        memcpy(ddev[s], &d, sizeof d);
     }
     return 0;
 }
@@ -170,7 +171,7 @@ static struct pipe dout = {.ep = &dendp[1], .buf = out_buf, .size = sizeof out_b
 static struct pipe dsect = {.ep = &dendp[1], .buf = sect, .size = sizeof sect};
 static char hid_buf[64] __attribute__((aligned(64)));
 static struct pipe dhid = {.ep = &dendp[3], .buf = hid_buf, .size = sizeof hid_buf};
-static int started, drive;
+static int started, drive, step; /* step: which part of pspmUsbStart failed, for the PSP's error */
 
 static int done(struct UsbdDeviceReq *r, int a, int b) {
     sceKernelSetEventFlag(((struct pipe *)r->arg)->flag, 1);
@@ -366,26 +367,26 @@ static int user_ptr(const void *p, int size) { /* a user pointer only, never ker
 int pspmUsbStart(int as_drive) {
     int k1 = pspSdkSetK1(0), r = 0;
     drive = as_drive;
-    if (drive)
-        r = open_stick();
-    if (r >= 0)
-        r = sceUsbStart(PSP_USBBUS_DRIVERNAME, 0, 0);
-    if (r >= 0)
-        r = sceUsbStart(drive ? DRIVE : DRIVER, 0, 0);
-    if (r >= 0)
-        r = sceUsbActivate(PID);
+    if (drive && (step = 1, r = open_stick()) < 0)
+        goto out;
+    if ((step = 2, r = sceUsbStart(PSP_USBBUS_DRIVERNAME, 0, 0)) < 0)
+        goto out;
+    if ((step = 3, r = sceUsbStart(drive ? DRIVE : DRIVER, 0, 0)) >= 0)
+        step = 4, r = sceUsbActivate(PID);
     if (r < 0 && drive) { /* the two-part device refused: the drive alone, buttons in the tail */
         sceUsbStop(DRIVE, 0, 0);
+        sceUsbbdUnregister(&drive_driver);
         dintf.num_interface = 1;
+        drive_driver.endpoints = 3;
         hid = 0;
-        r = sceUsbStart(DRIVE, 0, 0);
-        if (r >= 0)
-            r = sceUsbActivate(PID);
+        sceUsbbdRegister(&drive_driver);
+        if ((step = 5, r = sceUsbStart(DRIVE, 0, 0)) >= 0)
+            step = 6, r = sceUsbActivate(PID);
     }
     started = r >= 0;
     if (started && drive) {
         SceUID t = sceKernelCreateThread("pspm_drive", drive_thread, 0x18, 0x2000, 0, NULL);
-        r = t < 0 ? t : sceKernelStartThread(t, 0, NULL);
+        step = 7, r = t < 0 ? t : sceKernelStartThread(t, 0, NULL);
         if (r >= 0 && hid) {
             SceUID h = sceKernelCreateThread("pspm_gamepad", hid_thread, 0x17, 0x1000, 0, NULL);
             r = h < 0 ? h : sceKernelStartThread(h, 0, NULL);
@@ -393,9 +394,13 @@ int pspmUsbStart(int as_drive) {
         if (r >= 0)
             r = hid ? 0 : 1;
     }
+out:
     pspSdkSetK1(k1);
     return r;
 }
+
+/* Which step of pspmUsbStart failed: 1 the stick, 2 the bus, 3-4 the drive + gamepad, 5-6 the drive alone. */
+int pspmUsbStep(void) { return step; }
 
 /* Fill dst with size bytes (a multiple of 512) from the PC. Returns size, or < 0 when nothing could be read
    (cable out, PC not sending yet, or the drive is on). */
