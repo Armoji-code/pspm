@@ -30,6 +30,7 @@ int pspmUsbStart(int as_drive);
 int pspmUsbRead(void *dst, int size);
 int pspmUsbWrite(const void *src, int size);
 unsigned pspmCtrlButtons(void);
+int pspmUsbStep(void);
 
 #define W 480
 #define H 272
@@ -369,9 +370,11 @@ int main(int argc, char *argv[]) {
     if (mode && conn)
         storage();
     r = conn ? 0 : pspmUsbStart(mode);
-    if (r < 0)
+    if (r < 0) {
+        pspDebugScreenPrintf("Step %d: ", pspmUsbStep());
         stop("Could not start USB (%08x).\nIf RemoteJoyLite is on for games, turn it off\n"
              "(PSPM: STREAMING > REMOVE PLUGIN) and restart the PSP.", r);
+    }
     start("pad", pad, 0x12);
     if (mode) {
         pspDebugScreenPrintf("The memory stick is on the PC now%s; start your game in PPSSPP.\n", conn ? "" : " (read-only)");
