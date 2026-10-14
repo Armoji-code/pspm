@@ -135,17 +135,37 @@ class Drive:
             raise usb.core.USBError(f"drive: {e}") from None
 
 
+def _neighbours() -> list[str]:
+    """Every other address in the PC's own /24 (the usual home network), from the address it would reach the
+    internet with (a UDP connect sends nothing)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            me = s.getsockname()[0]
+    except OSError:
+        return []
+    net = me.rsplit(".", 1)[0]
+    return [f"{net}.{i}" for i in range(1, 255) if f"{net}.{i}" != me]
+
+
 def find_psp(c: dict) -> str | None:
-    """The address of a PSP running PSPM's app on Wi-Fi: [cast] wifi_host, else whoever answers a broadcast."""
+    """The address of a PSP running PSPM's app on Wi-Fi: [cast] wifi_host, else whoever answers. The search goes
+    to the broadcast address and to each address of the PC's network one by one: a firewall (ufw, Windows) drops
+    answers to a broadcast, but lets through the answer to a message the PC sent to that address itself."""
     if c.get("wifi_host"):
         return c["wifi_host"]
+    hosts = ["255.255.255.255", *_neighbours()]
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         s.settimeout(0.5)
         end = time.monotonic() + c["find_seconds"]
         while time.monotonic() < end:
             try:
-                s.sendto(b"PSPMFIND", ("255.255.255.255", c["find_port"]))
+                for h in hosts:
+                    try:
+                        s.sendto(b"PSPMFIND", (h, c["find_port"]))
+                    except OSError:
+                        pass  # not reachable from here
                 while True:
                     data, (host, _port) = s.recvfrom(16)
                     if data == b"PSPMHERE":
