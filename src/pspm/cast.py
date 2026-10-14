@@ -23,7 +23,6 @@ MAX_JPEG = 256 * 1024  # the PSP app's frame buffer
 # picked in the PSP app's menu, sent in each pad packet; "controller": the PSP only sends its buttons (for PPSSPP,
 # its memory stick shared over USB), so no frames go to it
 PRESETS = ["best_quality", "balanced", "best_fps", "controller"]
-GAMEPAD = "GAMING"  # the profile controller mode switches to, when there is one
 AUDIO = ["off", "on", "best"]  # the PSP's note button steps through these; [cast] audio_rates gives each a sample rate
 ZOOMS = [1, 2, 3]  # SELECT + START on the PSP steps through these, zoomed in where the mouse is
 ARROW = [(0, 0), (0, 16), (4, 12), (7, 18), (9, 17), (6, 11), (11, 11)]  # the mouse pointer, 16 px tall
@@ -203,12 +202,8 @@ def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> No
             if state:
                 if len(packet) > 14 and packet[14] < len(PRESETS):
                     live["preset"] = PRESETS[packet[14]]
-                    if live["preset"] == "controller" and not live.get("gamepad"):  # once: PPSSPP wants a gamepad
-                        live["gamepad"] = True
-                        names = [q["name"] for q in mapper.m["profiles"]]
-                        if GAMEPAD in names and controls.current(mapper.m)["name"] != GAMEPAD:
-                            mapper.m["active"] = names.index(GAMEPAD)
-                            mapper.switched(GAMEPAD)
+                    if live["preset"] == "controller":  # PPSSPP wants a whole gamepad, not a profile
+                        mapper.fixed = controls.CONTROLLER
                 if len(packet) > 15 and packet[15] < len(AUDIO):
                     live["audio"] = AUDIO[packet[15]]
                 mapper.update(*state)

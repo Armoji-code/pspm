@@ -143,14 +143,20 @@ _KEYS |= {str(i % 10): i + 1 for i in range(1, 11)} | {f"f{i}": 58 + i for i in 
     "f11": 87, "f12": 88, "esc": 1, "backspace": 14, "tab": 15, "enter": 28, "ctrl": 29, "shift": 42, "alt": 56,
     "space": 57, "up": 103, "left": 105, "right": 106, "down": 108,
     "mouse_left": 0x110, "mouse_right": 0x111, "mouse_middle": 0x112}
-_PAD = {"pad_a": 0x130, "pad_b": 0x131, "pad_y": 0x133, "pad_x": 0x134, "pad_lb": 0x136, "pad_rb": 0x137,
-        "pad_select": 0x13A, "pad_start": 0x13B, "pad_up": 0x220, "pad_down": 0x221, "pad_left": 0x222,
-        "pad_right": 0x223}
+# The gamepad copies an Xbox 360 pad's buttons, axes and USB ids, so SDL (PPSSPP, Steam, most games) knows its
+# layout and every button has its usual place without remapping. Buttons in xpad's order (A B X Y LB RB BACK START
+# GUIDE L3 R3), the d-pad as a hat.
+_PAD = {"pad_a": 0x130, "pad_b": 0x131, "pad_x": 0x133, "pad_y": 0x134, "pad_lb": 0x136, "pad_rb": 0x137,
+        "pad_select": 0x13A, "pad_start": 0x13B, "pad_guide": 0x13C, "pad_l3": 0x13D, "pad_r3": 0x13E}
+_HAT = {"pad_left": (0, -1), "pad_right": (0, 1), "pad_up": (1, -1), "pad_down": (1, 1)}  # (ABS_HAT0X/Y - 16, way)
+_PAD_AXES = {0: (-128, 127, 8), 1: (-128, 127, 8), 2: (0, 255, 0), 3: (-128, 127, 8), 4: (-128, 127, 8),
+             5: (0, 255, 0), 16: (-1, 1, 0), 17: (-1, 1, 0)}  # sticks, triggers at rest, hat
+XBOX360 = (3, 0x045E, 0x028E, 0x0114)  # BUS_USB, vendor, product, version
 
 
-def _uinput(name: str, keys, axes: dict, span=(-128, 127, 8)) -> int:
-    """A virtual device with these key codes and axes {type: [codes]}; absolute axes go over span (min, max,
-    flat middle). Returns its fd."""
+def _uinput(name: str, keys, axes: dict, ids=(6, 0, 0, 1)) -> int:
+    """A virtual device with these key codes and axes {type: {code: (min, max, flat middle)}} (relative axes:
+    {2: {code: None}}), with ids (bus, vendor, product, version). Returns its fd."""
     import fcntl
     import struct
 
@@ -163,11 +169,11 @@ def _uinput(name: str, keys, axes: dict, span=(-128, 127, 8)) -> int:
         fcntl.ioctl(fd, 0x40045565, k)  # UI_SET_KEYBIT
     for kind, codes in axes.items():
         fcntl.ioctl(fd, 0x40045564, kind)
-        for a in codes:
+        for a, span in codes.items():
             fcntl.ioctl(fd, 0x40045566 if kind == 2 else 0x40045567, a)  # UI_SET_RELBIT / UI_SET_ABSBIT
             if kind == 3:  # UI_ABS_SETUP
                 fcntl.ioctl(fd, 0x401C5504, struct.pack("=H2x6i", a, 0, span[0], span[1], 0, span[2], 0))
-    fcntl.ioctl(fd, 0x405C5503, struct.pack("=4H80sI", 6, 0, 0, 1, name.encode(), 0))  # UI_DEV_SETUP, BUS_VIRTUAL
+    fcntl.ioctl(fd, 0x405C5503, struct.pack("=4H80sI", *ids, name.encode(), 0))  # UI_DEV_SETUP
     fcntl.ioctl(fd, 0x5501)  # UI_DEV_CREATE
     return fd
 
@@ -178,8 +184,9 @@ class Input:
     PSP and zoom there. move() steps are in pixels of a 1920-wide screen."""
 
     def __init__(self, name: str):
-        self.kbd = _uinput(f"{name} keyboard", _KEYS.values(), {3: [0, 1]}, (0, 65535, 0))  # ABS_X, ABS_Y
-        self.pad = _uinput(f"{name} gamepad", _PAD.values(), {3: [0, 1]})
+        self.kbd = _uinput(f"{name} keyboard", _KEYS.values(), {3: {0: (0, 65535, 0), 1: (0, 65535, 0)}})
+        self.pad = _uinput(f"{name} gamepad", _PAD.values(), {3: _PAD_AXES}, XBOX360)
+        self.hat = {}  # d-pad directions held
         self.at = None  # pointer position, 0-1 across the screen, once the PSP moved it
 
     def _emit(self, fd: int, *events) -> None:
@@ -188,6 +195,11 @@ class Input:
         os.write(fd, b"".join(struct.pack("llHHi", 0, 0, *e) for e in (*events, (0, 0, 0))))  # + SYN_REPORT
 
     def key(self, target: str, down: bool) -> None:
+        if target in _HAT:
+            self.hat[target] = down
+            axis = _HAT[target][0]
+            way = sum(w for t, (a, w) in _HAT.items() if a == axis and self.hat.get(t))
+            return self._emit(self.pad, (3, 16 + axis, way))
         fd, code = (self.pad, _PAD[target]) if target in _PAD else (self.kbd, _KEYS[target])
         self._emit(fd, (1, code, int(down)))
 

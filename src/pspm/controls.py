@@ -19,6 +19,12 @@ _STICK_KEYS = {"arrows": ("left", "right", "up", "down"), "wasd": ("a", "d", "w"
 MAX_PROFILES = 6
 SWITCH = "select"  # the PSP button that steps to the next profile (on release); it maps to nothing itself
 ZOOM = "start"  # held SELECT + this steps the zoom; then SELECT doesn't switch profiles
+# CONTROLLER mode (PPSSPP): every PSP button is a gamepad button in its usual place, SELECT included, whatever profiles
+# say; SELECT neither switches profiles nor zooms there.
+CONTROLLER = {"name": "CONTROLLER", "stick": "pad", "buttons": {
+    "cross": "pad_a", "circle": "pad_b", "square": "pad_x", "triangle": "pad_y", "l": "pad_lb", "r": "pad_rb",
+    "select": "pad_select", "start": "pad_start", "up": "pad_up", "down": "pad_down", "left": "pad_left",
+    "right": "pad_right"}}
 
 
 def load(cfg: dict, path: Path = FILE) -> dict:
@@ -49,13 +55,16 @@ def parse(packet: bytes) -> tuple[int, int, int] | None:
 class Mapper:
     """Turns each PSP state into key(target, down) / stick(x, y) / move(dx, dy) calls on `out`, with the active
     profile of `m` (see load). Reads `m` on every update, so changes on the page apply at once. Letting go of
-    SELECT steps to the next profile and calls switched(name); SELECT + START calls zoom() instead."""
+    SELECT steps to the next profile and calls switched(name); SELECT + START calls zoom() instead. With
+    `fixed` set to a profile, that one is used as is and SELECT is a plain button."""
 
     def __init__(self, m: dict, out, c: dict, switched=lambda name: None, zoom=lambda: None):
         self.m, self.out, self.dead, self.speed, self.held = m, out, c["dead_zone"], c["mouse_speed"], set()
-        self.switched, self.zoom, self.was, self.combo = switched, zoom, 0, False
+        self.switched, self.zoom, self.was, self.combo, self.fixed = switched, zoom, 0, False, None
 
     def update(self, buttons: int, lx: int, ly: int) -> None:
+        if self.fixed:
+            return self._apply(self.fixed, buttons, lx, ly)
         sel, start = BUTTONS[SWITCH], BUTTONS[ZOOM]
         if buttons & sel and buttons & ~self.was & start:
             self.combo = True
@@ -68,8 +77,10 @@ class Mapper:
         self.was = buttons
         if buttons & sel:
             buttons &= ~start  # START with SELECT is the zoom, not its own key
-        p = current(self.m)
-        want = {p["buttons"].get(n, "none") for n, bit in BUTTONS.items() if buttons & bit and n != SWITCH} - {"none"}
+        self._apply(current(self.m), buttons & ~sel, lx, ly)
+
+    def _apply(self, p: dict, buttons: int, lx: int, ly: int) -> None:
+        want = {p["buttons"].get(n, "none") for n, bit in BUTTONS.items() if buttons & bit} - {"none"}
         x, y, mode, d = lx - 128, ly - 128, p["stick"], self.dead
         if mode in _STICK_KEYS:
             left, right, up, down = _STICK_KEYS[mode]
