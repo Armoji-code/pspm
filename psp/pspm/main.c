@@ -26,7 +26,7 @@
 PSP_MODULE_INFO("PSPM", 0, 1, 2);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
 
-int pspmUsbStart(void);
+int pspmUsbStart(int as_drive);
 int pspmUsbRead(void *dst, int size);
 int pspmUsbWrite(const void *src, int size);
 unsigned pspmCtrlButtons(void);
@@ -66,7 +66,9 @@ static char names[NETS + 1][32] = {"USB"};
 static volatile int pc = -1; /* the PC's socket over Wi-Fi */
 
 /* Mode, picked in the menu: the PC's screen, or controller for PPSSPP: the memory stick goes to the PC as a USB
-   drive (so PPSSPP plays its games and saves) and the buttons go over Wi-Fi, sent as preset 3. */
+   drive (so PPSSPP plays its games and saves) and the buttons, sent as preset 3, go with it: over the cable PSPM's
+   driver is the drive (read-only) and the PC reads the buttons from just after the stick's end; over Wi-Fi the
+   PSP's own USB mode shares the stick (read-write) and the buttons go over the network. */
 static const char *MODES[] = {"SCREEN", "CONTROLLER (PPSSPP)", "INFO (FOR PSPM)"};
 void info(const char *app);
 static int mode;
@@ -363,20 +365,18 @@ int main(int argc, char *argv[]) {
         pspDebugScreenPrintf("\nPress HOME to quit.");
         sceKernelSleepThread();
     }
-    if (mode && !conn)
-        stop("Controller mode sends the buttons over Wi-Fi:\npick a Wi-Fi network in CONNECTION.", 0);
     int server = conn ? wifi() : -1;
-    if (mode)
+    if (mode && conn)
         storage();
-    r = conn ? 0 : pspmUsbStart();
+    r = conn ? 0 : pspmUsbStart(mode);
     if (r < 0)
         stop("Could not start USB (%08x).\nIf RemoteJoyLite is on for games, turn it off\n"
              "(PSPM: STREAMING > REMOVE PLUGIN) and restart the PSP.", r);
     start("pad", pad, 0x12);
-    if (mode)
-        pspDebugScreenPrintf("The memory stick is on the PC now; start your game in PPSSPP.\n"
-                             "In PSPM: STREAMING > START SENDING makes this PSP its controller.\n\nHOME quits.");
-    else {
+    if (mode) {
+        pspDebugScreenPrintf("The memory stick is on the PC now%s; start your game in PPSSPP.\n", conn ? "" : " (read-only)");
+        pspDebugScreenPrintf("In PSPM: STREAMING > START SENDING makes this PSP its controller.\n\nHOME quits.");
+    } else {
         start("sound", sound, 0x10);
         pspDebugScreenPrintf("Waiting for the PC.\nIn PSPM: STREAMING > START SENDING.\n\nHOME quits.");
     }

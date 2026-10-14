@@ -116,6 +116,26 @@ class Net:
         return packet
 
 
+class Drive:
+    """The PSP app in CONTROLLER mode over the cable: a read-only USB drive with its buttons just after the stick's
+    end. Reads like the USB device above; nothing is written to it."""
+
+    def __init__(self, tail, c: dict):
+        self.tail, self.wait = tail, 1 / c["drive_hz"]
+
+    def write(self, *_) -> int:
+        return 0
+
+    def read(self, _endpoint, _size, _timeout_ms) -> bytes:
+        import usb.core
+
+        time.sleep(self.wait)
+        try:
+            return self.tail.read()
+        except OSError as e:  # unplugged
+            raise usb.core.USBError(f"drive: {e}") from None
+
+
 def find_psp(c: dict) -> str | None:
     """The address of a PSP running PSPM's app on Wi-Fi: [cast] wifi_host, else whoever answers a broadcast."""
     if c.get("wifi_host"):
@@ -139,8 +159,8 @@ def find_psp(c: dict) -> str | None:
 
 
 def open_psp(cfg: dict, password: str | None = None):
-    """The PSP running PSPM's app: over libusb when the cable is in, else over Wi-Fi. On Linux the first call
-    allows the PSP's USB (one password)."""
+    """The PSP running PSPM's app: over libusb when the cable is in (or as its drive in CONTROLLER mode), else
+    over Wi-Fi. On Linux the first call allows the PSP's USB (one password)."""
     import usb.core  # pyusb; imported here so the rest of PSPM never needs libusb
 
     c = cfg["cast"]
@@ -153,6 +173,9 @@ def open_psp(cfg: dict, password: str | None = None):
     if psp is not None:
         psp.set_configuration()
         return psp
+    tail = getattr(platform.current(), "psp_drive", lambda c: None)(c)
+    if tail:
+        return Drive(tail, c)
     host = find_psp(c)
     if host:
         try:

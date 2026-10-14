@@ -153,6 +153,7 @@ check_seconds = 5  # START VIEWER waits this long for the viewer to fail before 
 # PSP's controls. Written to /etc/udev/rules.d once, with one password prompt.
 udev_rule = """
 SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="01c9", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="block", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="01c9", ATTRS{bcdDevice}=="0300", TAG+="uaccess"
 KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", TAG+="uaccess", OPTIONS+="static_node=uinput"
 """
 
@@ -184,6 +185,11 @@ old_apps = ["PSPM_SCREEN", "PSPM_INFO"]  # the two apps it replaced, removed whe
 vendor = 0x054C
 product = 0x01C9      # PSPLink's "Type B", so RemoteJoyLite's Windows driver (Zadig) and the udev rule cover it
 bcd_device = 0x0200   # tells PSPM's app apart from RemoteJoyLite (0x0100) on the same ID
+# CONTROLLER mode over the cable: the PSP app is a read-only USB drive of the memory stick (bcdDevice drive_bcd)
+# and the buttons are in the drive_tail sectors after the stick's end, read drive_hz times a second (Linux).
+drive_bcd = 0x0300
+drive_tail = 8
+drive_hz = 120
 endpoint = 0x02       # frames to the PSP
 pad_endpoint = 0x81   # the PSP's buttons and stick back to the PC
 timeout_ms = 2000
