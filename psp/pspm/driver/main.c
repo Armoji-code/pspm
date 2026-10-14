@@ -36,22 +36,28 @@ static struct ConfigDescriptor conf = {
 static struct InterfaceDescriptor iface = {
     .bLength = 9, .bDescriptorType = 4, .bNumEndpoints = 3, .bInterfaceClass = 0xFF, .bInterfaceSubClass = 1,
     .bInterfaceProtocol = 0xFF, .iInterface = 1};
-static void fill(struct UsbData *d, int packet) {
+/* One-interface device in the SDK's layout (the one the vendor device has always worked with): n endpoints from
+   0x81, 0x02, 0x03 under interface descriptor i; bcd tells PSPM's devices apart. */
+static void fill(struct UsbData *d, int packet, const struct InterfaceDescriptor *i, int n, int bcd) {
     static const unsigned char addr[3] = {0x81, 0x02, 0x03};
-    memcpy(d->devdesc, &dev, sizeof dev);
+    struct DeviceDescriptor dv = dev;
+    struct ConfigDescriptor cf = conf;
+    dv.bcdDevice = bcd;
+    cf.wTotalLength = 9 + 9 + n * 7;
+    memcpy(d->devdesc, &dv, sizeof dv);
     d->config.pconfdesc = &d->confdesc;
     d->config.pinterfaces = &d->interfaces;
     d->config.pinterdesc = &d->interdesc;
     d->config.pendp = &d->endp[0];
-    memcpy(d->confdesc.desc, &conf, sizeof conf);
+    memcpy(d->confdesc.desc, &cf, sizeof cf);
     d->confdesc.pinterfaces = &d->interfaces;
     d->interfaces.pinterdesc[0] = &d->interdesc;
     d->interfaces.intcount = 1;
-    memcpy(d->interdesc.desc, &iface, sizeof iface);
+    memcpy(d->interdesc.desc, i, sizeof *i);
     d->interdesc.pendp = &d->endp[0];
-    for (int i = 0; i < 3; i++) {
-        struct EndpointDescriptor e = {7, 5, addr[i], 2, packet, 0};
-        memcpy(d->endp[i].desc, &e, sizeof e);
+    for (int k = 0; k < n; k++) {
+        struct EndpointDescriptor e = {7, 5, addr[k], 2, packet, 0};
+        memcpy(d->endp[k].desc, &e, sizeof e);
     }
 }
 
@@ -59,8 +65,8 @@ static int none(void) { return 0; }
 
 static int start_func(int size, void *args) {
     memset(data, 0, sizeof data);
-    fill(&data[0], 512);
-    fill(&data[1], 64);
+    fill(&data[0], 512, &iface, 3, 0x200);
+    fill(&data[1], 64, &iface, 3, 0x200);
     return 0;
 }
 
@@ -88,13 +94,20 @@ static struct UsbInterface dintf = {0xFFFFFFFF, 0, 2};
 static int hid = 1; /* 0: the drive alone, buttons in the tail */
 static unsigned char ddev[2][32] __attribute__((aligned(16))); /* [0] high speed, [1] full speed; 18 bytes each,
                                                                   but every descriptor must start on its own 16 */
-static struct epd depd[2][3] __attribute__((aligned(16)));
-static struct ifd difd[2][2] __attribute__((aligned(16)));
+/* Each list ends with an empty entry, like the SDK layout's spare endpoint slot and FuSa's tables. */
+static struct epd depd[2][4] __attribute__((aligned(16)));
+static struct ifd difd[2][3] __attribute__((aligned(16)));
+/* The drive alone, in the SDK's layout. */
+static struct InterfaceDescriptor diface = {9, 4, 0, 0, 2, 8, 6, 0x50, 1}; /* mass storage, SCSI, bulk-only */
+static struct UsbData ddata[2];
 static struct sets dsets[2][2] __attribute__((aligned(16)));
 static struct cfd dcfd[2] __attribute__((aligned(16)));
 static struct conf dconf[2] __attribute__((aligned(16)));
 
 static int drive_start(int size, void *args) {
+    memset(ddata, 0, sizeof ddata);
+    fill(&ddata[0], 512, &diface, 2, 0x300);
+    fill(&ddata[1], 64, &diface, 2, 0x300);
     for (int s = 0; s < 2; s++) {
         int bulk = s ? 64 : 512;
         unsigned char e[3][7] = {{7, 5, 0x81, 2, bulk, bulk >> 8, 0}, {7, 5, 0x02, 2, bulk, bulk >> 8, 0},
@@ -378,6 +391,10 @@ int pspmUsbStart(int as_drive) {
         sceUsbbdUnregister(&drive_driver);
         dintf.num_interface = 1;
         drive_driver.endpoints = 3;
+        drive_driver.devp_hi = ddata[0].devdesc;
+        drive_driver.confp_hi = &ddata[0].config;
+        drive_driver.devp = ddata[1].devdesc;
+        drive_driver.confp = &ddata[1].config;
         hid = 0;
         sceUsbbdRegister(&drive_driver);
         if ((step = 5, r = sceUsbStart(DRIVE, 0, 0)) >= 0)
