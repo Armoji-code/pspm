@@ -19,7 +19,10 @@ from .device import Device
 
 W, H = 480, 272
 MAX_JPEG = 256 * 1024  # PSPM Screen's frame buffer
-PRESETS = ["best_quality", "balanced", "best_fps"]  # picked in PSPM Screen's menu, sent in each pad packet
+# picked in PSPM Screen's menu, sent in each pad packet; "controller": the PSP only sends its buttons (for PPSSPP,
+# its memory stick shared over USB), so no frames go to it
+PRESETS = ["best_quality", "balanced", "best_fps", "controller"]
+GAMEPAD = "GAMING"  # the profile controller mode switches to, when there is one
 AUDIO = ["off", "on", "best"]  # the PSP's note button steps through these; [cast] audio_rates gives each a sample rate
 ZOOMS = [1, 2, 3]  # SELECT + START on the PSP steps through these, zoomed in where the mouse is
 ARROW = [(0, 0), (0, 16), (4, 12), (7, 18), (9, 17), (6, 11), (11, 11)]  # the mouse pointer, 16 px tall
@@ -172,6 +175,12 @@ def _pad(psp, c: dict, mapper: controls.Mapper, stop, pressed, live: dict) -> No
             if state:
                 if len(packet) > 14 and packet[14] < len(PRESETS):
                     live["preset"] = PRESETS[packet[14]]
+                    if live["preset"] == "controller" and not live.get("gamepad"):  # once: PPSSPP wants a gamepad
+                        live["gamepad"] = True
+                        names = [q["name"] for q in mapper.m["profiles"]]
+                        if GAMEPAD in names and controls.current(mapper.m)["name"] != GAMEPAD:
+                            mapper.m["active"] = names.index(GAMEPAD)
+                            mapper.switched(GAMEPAD)
                 if len(packet) > 15 and packet[15] < len(AUDIO):
                     live["audio"] = AUDIO[packet[15]]
                 mapper.update(*state)
@@ -266,6 +275,14 @@ def send(cfg: dict, stop, fps=lambda n, ms, preset: None, password: str | None =
         with ThreadPoolExecutor(most) as pool:
             todo = deque([pool.submit(grab)])
             while not stop():
+                if live["preset"] == "controller":
+                    if not pad.is_alive():
+                        break  # the PSP went away
+                    if not live.get("told"):
+                        live["told"] = True
+                        fps(0, 0, "controller")
+                    time.sleep(0.1)
+                    continue
                 t, p = time.monotonic(), c | c["presets"].get(live["preset"], {})
                 while len(todo) < p["captures"]:
                     todo.append(pool.submit(grab))

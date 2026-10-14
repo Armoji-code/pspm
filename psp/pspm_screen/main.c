@@ -9,6 +9,8 @@
 #include <psppower.h>
 #include <pspaudio.h>
 #include <psputility.h>
+#include <pspusb.h>
+#include <pspusbstor.h>
 #include <pspnet.h>
 #include <pspnet_inet.h>
 #include <pspnet_apctl.h>
@@ -62,6 +64,11 @@ static int conn;
 static char names[NETS + 1][32] = {"USB"};
 static volatile int pc = -1; /* the PC's socket over Wi-Fi */
 
+/* Mode, picked in the menu: the PC's screen, or controller for PPSSPP: the memory stick goes to the PC as a USB
+   drive (so PPSSPP plays its games and saves) and the buttons go over Wi-Fi, sent as preset 3. */
+static const char *MODES[] = {"SCREEN", "CONTROLLER (PPSSPP)"};
+static int mode;
+
 static int rx(void *dst, int size) {
     if (!conn)
         return pspmUsbRead(dst, size);
@@ -98,7 +105,7 @@ static int callbacks(SceSize args, void *argp) {
    quality preset (0 best quality, 1 balanced, 2 best FPS), audio (0 off, 1 on, 2 best). */
 static int pad(SceSize args, void *argp) {
     unsigned char msg[16] __attribute__((aligned(64))) = "PSPMPAD1";
-    unsigned was = ~0u;
+    unsigned was = ~0u, ticks = 0;
     SceCtrlData c;
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
@@ -107,7 +114,7 @@ static int pad(SceSize args, void *argp) {
         memcpy(msg + 8, &c.Buttons, 4);
         msg[12] = c.Lx;
         msg[13] = c.Ly;
-        msg[14] = preset;
+        msg[14] = mode ? 3 : preset;
         unsigned all = pspmCtrlButtons(), now = all & ~was;
         was = all;
         if (now & PSP_CTRL_NOTE) {
@@ -116,6 +123,8 @@ static int pad(SceSize args, void *argp) {
             shown = sceKernelGetSystemTimeLow() + 2000000;
         }
         msg[15] = audio;
+        if (mode && !(++ticks % 60))
+            scePowerTick(0); /* nothing else keeps the PSP awake in controller mode */
         if (tx(msg, sizeof msg) < 0)
             sceKernelDelayThread(100 * 1000); /* PC not reading yet */
     }
@@ -225,10 +234,29 @@ static int wifi(void) {
     return s;
 }
 
+/* Shares the memory stick with the PC like USB mode does, while this keeps running from memory. */
+static void storage(void) {
+    static const char *mods[] = {"chkreg", "npdrm", "semawm", "usbstor", "usbstormgr", "usbstorms", "usbstorboot"};
+    char path[64];
+    for (int i = 0; i < sizeof mods / sizeof *mods; i++) {
+        snprintf(path, sizeof path, "flash0:/kd/%s.prx", mods[i]);
+        load(path); /* an error here means it already is */
+    }
+    int r = sceUsbStart(PSP_USBBUS_DRIVERNAME, 0, 0);
+    if (r >= 0)
+        r = sceUsbStart(PSP_USBSTOR_DRIVERNAME, 0, 0);
+    if (r >= 0)
+        r = sceUsbstorBootSetCapacity(0x800000);
+    if (r >= 0)
+        r = sceUsbActivate(0x1c8);
+    if (r < 0)
+        stop("Could not share the memory stick over USB (%08x).", r);
+}
+
 /* Before streaming: UP/DOWN picks a row, LEFT/RIGHT changes it, CROSS starts. */
 static void menu(const char *dir) {
     char file[256];
-    unsigned char b[2];
+    unsigned char b[3];
     int count = 1, ids[NETS + 1] = {0}, row = 0, at = 0;
     for (int i = 1; i <= NETS; i++) { /* the networks saved in SETTINGS > NETWORK SETTINGS */
         netData d;
@@ -240,8 +268,9 @@ static void menu(const char *dir) {
     snprintf(file, sizeof file, "%ssettings.bin", dir);
     SceUID f = sceIoOpen(file, PSP_O_RDONLY, 0);
     if (f >= 0) {
-        if (sceIoRead(f, b, 2) == 2) {
+        if (sceIoRead(f, b, 3) == 3) {
             preset = b[0] < 3 ? b[0] : preset;
+            mode = b[2] < 2 ? b[2] : 0;
             for (int i = 0; i < count; i++)
                 at = ids[i] == b[1] ? i : at;
         }
@@ -251,32 +280,38 @@ static void menu(const char *dir) {
     unsigned old = ~0u; /* nothing counts until it's released once */
     for (;;) {
         pspDebugScreenSetXY(0, 2);
-        pspDebugScreenPrintf("%c QUALITY      < %-12s >\n\n", row ? ' ' : '>', PRESETS[preset]);
-        pspDebugScreenPrintf("%c CONNECTION   < %-30s >\n\n\n", row ? '>' : ' ', names[at]);
+        pspDebugScreenPrintf("%c MODE         < %-30s >\n\n", row == 0 ? '>' : ' ', MODES[mode]);
+        pspDebugScreenPrintf("%c QUALITY      < %-30s >\n\n", row == 1 ? '>' : ' ', PRESETS[preset]);
+        pspDebugScreenPrintf("%c CONNECTION   < %-30s >\n\n\n", row == 2 ? '>' : ' ', names[at]);
         pspDebugScreenPrintf("UP/DOWN: PICK   LEFT/RIGHT: CHANGE   CROSS: START   HOME: QUIT");
         sceCtrlReadBufferPositive(&c, 1);
         unsigned now = c.Buttons & ~old;
         int step = (now & PSP_CTRL_RIGHT ? 1 : 0) - (now & PSP_CTRL_LEFT ? 1 : 0);
         old = c.Buttons;
-        if (now & (PSP_CTRL_UP | PSP_CTRL_DOWN))
-            row ^= 1;
-        if (row)
-            at = (at + step + count) % count;
-        else
+        if (now & PSP_CTRL_DOWN)
+            row = (row + 1) % 3;
+        if (now & PSP_CTRL_UP)
+            row = (row + 2) % 3;
+        if (row == 0)
+            mode = (mode + step + 2) % 2;
+        else if (row == 1)
             preset = (preset + step + 3) % 3;
+        else
+            at = (at + step + count) % count;
         if (now & PSP_CTRL_CROSS)
             break;
     }
     conn = ids[at];
     b[0] = preset;
     b[1] = conn;
+    b[2] = mode;
     f = sceIoOpen(file, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
     if (f >= 0) {
-        sceIoWrite(f, b, 2);
+        sceIoWrite(f, b, 3);
         sceIoClose(f);
     }
     pspDebugScreenClear();
-    pspDebugScreenPrintf("PSPM SCREEN - %s - %s\n\n", PRESETS[preset], names[at]);
+    pspDebugScreenPrintf("PSPM SCREEN - %s - %s\n\n", mode ? MODES[mode] : PRESETS[preset], names[at]);
 }
 
 int main(int argc, char *argv[]) {
@@ -306,14 +341,23 @@ int main(int argc, char *argv[]) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     menu(dir);
+    if (mode && !conn)
+        stop("Controller mode sends the buttons over Wi-Fi:\npick a Wi-Fi network in CONNECTION.", 0);
     int server = conn ? wifi() : -1;
+    if (mode)
+        storage();
     r = conn ? 0 : pspmUsbStart();
     if (r < 0)
         stop("Could not start USB (%08x).\nIf RemoteJoyLite is on for games, turn it off\n"
              "(PSPM: STREAMING > REMOVE PLUGIN) and restart the PSP.", r);
     start("pad", pad, 0x12);
-    start("sound", sound, 0x10);
-    pspDebugScreenPrintf("Waiting for the PC.\nIn PSPM: STREAMING > START SENDING.\n\nHOME quits.");
+    if (mode)
+        pspDebugScreenPrintf("The memory stick is on the PC now; start your game in PPSSPP.\n"
+                             "In PSPM: STREAMING > START SENDING makes this PSP its controller.\n\nHOME quits.");
+    else {
+        start("sound", sound, 0x10);
+        pspDebugScreenPrintf("Waiting for the PC.\nIn PSPM: STREAMING > START SENDING.\n\nHOME quits.");
+    }
 
     int back = 0;
     for (;;) {
@@ -329,6 +373,8 @@ int main(int argc, char *argv[]) {
                 sceKernelDelayThread(100 * 1000);
             continue;
         }
+        if (mode)
+            continue; /* controller: the PC's stream isn't shown */
         unsigned size;
         memcpy(&size, in + 8, 4);
         if (!memcmp(in, "PSPMAUD1", 8)) {
