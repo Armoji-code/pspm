@@ -98,39 +98,6 @@ class _Proc:
         self.p.wait()
 
 
-class _Tail:
-    """The sectors after the end of the PSP app's read-only drive, where it keeps its latest "PSPMPAD1" packet.
-    Read past the page cache (O_DIRECT, which wants an aligned buffer: mmap's is)."""
-
-    def __init__(self, path: str, sector: int, sectors: int):
-        import mmap
-
-        try:
-            self.fd = os.open(path, os.O_RDONLY | os.O_DIRECT)
-        except OSError as e:
-            raise OSError(f"can't read the PSP's drive {path} ({e.strerror}); the streaming udev rule allows it: "
-                          "START SENDING again to install it") from None
-        self.at, self.buf = sector * 512, mmap.mmap(-1, sectors * 512)
-
-    def read(self) -> bytes:
-        os.preadv(self.fd, [self.buf], self.at)
-        return bytes(self.buf[:16])
-
-    def close(self) -> None:
-        os.close(self.fd)
-
-
-def psp_drive(c: dict):
-    """The PSP app's read-only drive (CONTROLLER mode over the cable) as a _Tail, or None when it isn't plugged in."""
-    want = (f"{c['vendor']:04x}", f"{c['product']:04x}", f"{c['drive_bcd']:04x}")
-    for blk in Path("/sys/block").glob("sd*"):
-        usb = next((p for p in (blk / "device").resolve().parents if (p / "idVendor").is_file()), None)
-        if usb and tuple((usb / f).read_text().strip() for f in ("idVendor", "idProduct", "bcdDevice")) == want:
-            size = int((blk / "size").read_text())  # in 512-byte sectors, the tail included
-            return _Tail(f"/dev/{blk.name}", size - c["drive_tail"], c["drive_tail"])
-    return None
-
-
 def sound(c: dict, rate: int):
     """What the PC is playing, as 16-bit stereo PCM at `rate`: read(n) bytes, close(). parec records the default
     output's monitor on PulseAudio and PipeWire."""

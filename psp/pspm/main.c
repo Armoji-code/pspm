@@ -66,9 +66,9 @@ static char names[NETS + 1][32] = {"USB"};
 static volatile int pc = -1; /* the PC's socket over Wi-Fi */
 
 /* Mode, picked in the menu: the PC's screen, or controller for PPSSPP: the memory stick goes to the PC as a USB
-   drive (so PPSSPP plays its games and saves) and the buttons, sent as preset 3, go with it: over the cable PSPM's
-   driver is the drive (read-only) and the PC reads the buttons from just after the stick's end; over Wi-Fi the
-   PSP's own USB mode shares the stick (read-write) and the buttons go over the network. */
+   drive (so PPSSPP plays its games and saves) and the buttons go with it: over the cable PSPM's driver is the
+   drive (read-only) and a plain USB gamepad at once; over Wi-Fi the PSP's own USB mode shares the stick
+   (read-write) and the buttons go over the network, sent as preset 3. */
 static const char *MODES[] = {"SCREEN", "CONTROLLER (PPSSPP)", "INFO (FOR PSPM)"};
 void info(const char *app);
 static int mode;
@@ -375,7 +375,9 @@ int main(int argc, char *argv[]) {
     start("pad", pad, 0x12);
     if (mode) {
         pspDebugScreenPrintf("The memory stick is on the PC now%s; start your game in PPSSPP.\n", conn ? "" : " (read-only)");
-        pspDebugScreenPrintf("In PSPM: STREAMING > START SENDING makes this PSP its controller.\n\nHOME quits.");
+        pspDebugScreenPrintf(conn ? "In PSPM: STREAMING > START SENDING makes this PSP its controller.\n\nHOME quits."
+                                  : "This PSP is also a USB gamepad: map it once in PPSSPP's control settings.\n\n"
+                                    "HOME quits.");
     } else {
         start("sound", sound, 0x10);
         pspDebugScreenPrintf("Waiting for the PC.\nIn PSPM: STREAMING > START SENDING.\n\nHOME quits.");
