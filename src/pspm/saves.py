@@ -89,10 +89,19 @@ def save_state(state: dict, path: Path = STATE) -> None:
     path.write_text(json.dumps(state, indent=1))
 
 
+def history(state: dict, pc: Path) -> dict:
+    """state["last"], the hashes from the last sync, for `pc` only: synced with another folder, it says nothing
+    about this one, and trusting it could let an old save overwrite a newer one."""
+    if state.get("last_pc") != str(pc):
+        state["last"], state["last_pc"] = {}, str(pc)
+    return state["last"]
+
+
 def ppsspp_dir(cfg: dict, state: dict) -> Path | None:
     """PPSSPP's SAVEDATA: the folder the user picked, else the first configured PSP folder that exists."""
-    if state.get("ppsspp"):
-        return Path(state["ppsspp"])
+    if state.get("ppsspp"):  # picked: its SAVEDATA, also when PPSSPP's own folder or its PSP folder was picked
+        p = Path(state["ppsspp"])
+        return next((c for c in (p / "PSP" / "SAVEDATA", p / "SAVEDATA") if c.is_dir()), p)
     docs = str(user_documents_path())
     for c in cfg["saves"]["ppsspp_paths"].get(platform.name(), []):
         p = Path(os.path.expandvars(c.replace("{documents}", docs))).expanduser()
