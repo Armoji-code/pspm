@@ -143,7 +143,7 @@ class SavesPage(QWidget):
         def work():
             with self._lock():  # the cloud backup page syncs too, and writes the same state file
                 self.state = saves.load_state(self.state_file)
-                items = saves.plan(*dirs, self.state["last"], self._say, self.state.setdefault("hashes", {}))
+                items = saves.plan(*dirs, saves.history(self.state, dirs[1]), self._say, self.state.setdefault("hashes", {}))
                 saves.save_state(self.state, self.state_file)
                 return items
 
@@ -214,7 +214,7 @@ class SavesPage(QWidget):
         def work():
             with self._lock():
                 self.state = saves.load_state(self.state_file)
-                run = saves.apply(items, *dirs, self.state["last"], self.backups, self._say, self.state.setdefault("hashes", {}))
+                run = saves.apply(items, *dirs, saves.history(self.state, dirs[1]), self.backups, self._say, self.state.setdefault("hashes", {}))
                 saves.save_state(self.state, self.state_file)
             return run, sum(i.action in (saves.TO_PC, saves.TO_PSP) for i in items)
 

@@ -63,9 +63,11 @@ def test_ppsspp_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(saves.platform, "name", lambda: "linux")
     cfg = {"saves": {"ppsspp_paths": {"linux": [str(tmp_path / "nope"), str(tmp_path / "PSP")]}}}
     assert saves.ppsspp_dir(cfg, {}) is None
-    (tmp_path / "PSP").mkdir()
+    (tmp_path / "PSP" / "SAVEDATA").mkdir(parents=True)
     assert saves.ppsspp_dir(cfg, {}) == tmp_path / "PSP" / "SAVEDATA"
     assert saves.ppsspp_dir(cfg, {"ppsspp": "/picked"}) == saves.Path("/picked")
+    assert saves.ppsspp_dir(cfg, {"ppsspp": str(tmp_path)}) == tmp_path / "PSP" / "SAVEDATA"  # PPSSPP's folder picked
+    assert saves.ppsspp_dir(cfg, {"ppsspp": str(tmp_path / "PSP")}) == tmp_path / "PSP" / "SAVEDATA"
 
 
 def sfo(**kv):
@@ -102,3 +104,11 @@ def test_hash_cache_skips_unchanged_saves(tmp_path, monkeypatch):
     assert saves.plan(psp, pc, last, cache=cache)[0].action == saves.SAME and all(p.name == "PARAM.SFO" for p in read)  # no save data re-read
     put(psp, "A", b"played")
     assert saves.plan(psp, pc, last, cache=cache)[0].action == saves.TO_PC
+
+
+def test_history_is_per_ppsspp_folder(tmp_path):
+    st = {"last": {"A": "h"}}
+    assert saves.history(st, tmp_path / "wrong") == {}  # no folder recorded yet: no history to trust
+    st["last"]["A"] = "h"
+    assert saves.history(st, tmp_path / "wrong") == {"A": "h"}
+    assert saves.history(st, tmp_path / "PSP" / "SAVEDATA") == {}
