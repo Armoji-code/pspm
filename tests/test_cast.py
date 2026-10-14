@@ -1,6 +1,7 @@
 import io
 import random
 import struct
+import sys
 
 import pytest
 from PIL import Image
@@ -274,11 +275,11 @@ def test_sound_recorder_that_quits_says_why():
     rec.close()
 
 
-def test_controller_mode_sends_no_frames_and_picks_gaming(tmp_path, monkeypatch):
+def test_controller_mode_sends_no_frames_and_is_a_whole_gamepad(tmp_path, monkeypatch):
     import usb.core
 
     cfg = config.load(tmp_path / "x")
-    pad = [b"PSPMPAD1" + struct.pack("<IBBBB", 0x4000, 128, 128, 3, 0)] * 3
+    pad = [b"PSPMPAD1" + struct.pack("<IBBBB", b, 128, 128, 3, 0) for b in (0x4000, 0x8201, 0)]  # ✕; □ R SELECT
     sent, did, names = [], [], []
 
     class Psp:
@@ -308,7 +309,8 @@ def test_controller_mode_sends_no_frames_and_picks_gaming(tmp_path, monkeypatch)
     monkeypatch.setattr(platform.current(), "Input", Input)
     m = controls.load(cfg, tmp_path / "c.json")
     cast.send(cfg, lambda: False, m=m, switched=names.append)  # returns once the PSP goes away
-    assert names == ["GAMING"] and ("pad_a", True) in did and b"PSPMAUD1" not in sent
+    assert names == [] and b"PSPMAUD1" not in sent  # SELECT is a button here, not the profile switch
+    assert {t for t, down in did if down} == {"pad_a", "pad_x", "pad_rb", "pad_select"}
     assert sent.count(b"PSPMSCR2") <= 1  # at most the frame already on its way before the first pad packet
 
 
@@ -334,3 +336,25 @@ def test_controller_over_the_cable_reads_the_drive(tmp_path, monkeypatch):
     with pytest.raises(usb.core.USBError):
         psp.read(0x81, 512, 200)  # unplugged
     assert 'ATTRS{bcdDevice}=="0300"' in (tmp_path / "60-psp-b-usb.rules").read_text()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="uinput is Linux only")
+def test_linux_gamepad_is_an_xbox_pad_with_a_hat(monkeypatch):
+    import fcntl
+    import os
+
+    from pspm.platform import linux
+
+    calls, writes = [], []
+    monkeypatch.setattr(os, "open", lambda *a: 7)
+    monkeypatch.setattr(os, "write", lambda fd, b: writes.append((fd, b)))
+    monkeypatch.setattr(fcntl, "ioctl", lambda fd, req, arg=0: calls.append((req, arg)))
+    pad = linux.Input("PSPM PSP")
+    setup = [a for r, a in calls if r == 0x405C5503][1]
+    assert struct.unpack_from("=4H", setup) == linux.XBOX360
+    keys = [a for r, a in calls if r == 0x40045565]
+    assert keys[-11:] == [0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x13A, 0x13B, 0x13C, 0x13D, 0x13E]
+    pad.key("pad_left", True)
+    pad.key("pad_right", True)
+    pad.key("pad_left", False)
+    assert [struct.unpack_from("llHHi", b)[2:] for _, b in writes] == [(3, 16, -1), (3, 16, 0), (3, 16, 1)]
