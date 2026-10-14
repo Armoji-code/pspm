@@ -27,7 +27,7 @@ pspm = "pspm.__main__:main"
 version = { attr = "pspm.__version__" }
 
 [tool.setuptools.package-data]
-pspm = ["*.toml", "psp_app/EBOOT.PBP", "psp_app/screen/*", "ui/*.svg"]
+pspm = ["*.toml", "psp_app/pspm/*", "ui/*.svg"]
 
 [tool.ruff]
 line-length = 120

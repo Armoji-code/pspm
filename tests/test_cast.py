@@ -77,7 +77,7 @@ def test_open_says_how_to_start_the_psp_app(tmp_path, monkeypatch):
     monkeypatch.setattr(platform.current(), "stream_ready", lambda rule, pw: None)
     monkeypatch.setattr(usb.core, "find", lambda **kw: None)
     monkeypatch.setattr(cast, "find_psp", lambda c: None)
-    with pytest.raises(OSError, match="PSPM SCREEN"):
+    with pytest.raises(OSError, match="start PSPM on the PSP"):
         cast.open_psp(cfg)
     assert "01c9" in (tmp_path / "60-psp-b-usb.rules").read_text() and "uinput" in (tmp_path / "60-psp-b-usb.rules").read_text()
 
@@ -85,10 +85,12 @@ def test_open_says_how_to_start_the_psp_app(tmp_path, monkeypatch):
 def test_install_app_into_category_moves_old_copy(tmp_path):
     cfg = config.load(tmp_path / "x")
     dev = device.Device(tmp_path, cfg["device"]["folders"])
+    for old in ("PSPM_SCREEN", "CAT_Tools/PSPM_INFO"):  # the two apps before they were one
+        (dev.path("games") / old).mkdir(parents=True)
     cast.install_app(dev, cfg)
     dest = cast.install_app(dev, cfg, "CAT_Tools")
-    assert dest == dev.path("games") / "CAT_Tools" / "PSPM_SCREEN" and cast.installed(dev, cfg)
-    assert not (dev.path("games") / "PSPM_SCREEN").exists()
+    assert dest == dev.path("games") / "CAT_Tools" / "PSPM" and cast.installed(dev, cfg)
+    assert sorted(p.name for p in dev.path("games").rglob("*") if p.is_dir()) == ["CAT_Tools", "PSPM"]
 
 
 def test_slow_capture_runs_in_parallel(tmp_path, monkeypatch):

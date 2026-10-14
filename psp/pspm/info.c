@@ -1,4 +1,4 @@
-/* PSPM Info: writes everything the PSP can report to PSP/COMMON/pspm_info.txt for PSPM to read over USB. */
+/* PSPM's INFO mode: writes everything the PSP can report to PSP/COMMON/pspm_info.txt for PSPM to read over USB. */
 #include <pspkernel.h>
 #include <pspdebug.h>
 #include <pspctrl.h>
@@ -15,9 +15,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-
-PSP_MODULE_INFO("PSPM_INFO", 0, 1, 0);
-PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
 
 static FILE *out;
 
@@ -40,24 +37,22 @@ static int param(int id) {
     return v;
 }
 
-int main(int argc, char *argv[]) {
-    /* PSP Go keeps apps on ef0:, so write to the device we were started from. */
+/* app: where PSPM was started from; PSP Go keeps apps on ef0:, so the report goes to that device. Returns when
+   the report is written and shown. */
+void info(const char *app) {
     char dir[64] = "ms0:";
-    const char *colon = argc > 0 ? strchr(argv[0], ':') : NULL;
-    if (colon && colon - argv[0] < 8)
-        snprintf(dir, sizeof dir, "%.*s", (int)(colon - argv[0] + 1), argv[0]);
+    const char *colon = strchr(app, ':');
+    if (colon && colon - app < 8)
+        snprintf(dir, sizeof dir, "%.*s", (int)(colon - app + 1), app);
     char path[96];
     snprintf(path, sizeof path, "%s/PSP/COMMON", dir);
     sceIoMkdir(path, 0777);
     strcat(path, "/pspm_info.txt");
 
-    pspDebugScreenInit();
     out = fopen(path, "w");
     if (!out) {
         pspDebugScreenPrintf("Could not write %s\n", path);
-        sceKernelDelayThread(4 * 1000 * 1000);
-        sceKernelExitGame();
-        return 0;
+        return;
     }
 
     /* Hardware and firmware */
@@ -138,11 +133,5 @@ int main(int argc, char *argv[]) {
         put("psp_clock", "%04d-%02d-%02d %02d:%02d:%02d", t.year, t.month, t.day, t.hour, t.minute, t.second);
 
     fclose(out);
-    pspDebugScreenPrintf("\nSaved to %s\nPlug the PSP into your computer to see it in PSPM.\n\nPress X to exit.\n", path);
-    SceCtrlData pad;
-    do {
-        sceCtrlReadBufferPositive(&pad, 1);
-    } while (!(pad.Buttons & PSP_CTRL_CROSS));
-    sceKernelExitGame();
-    return 0;
+    pspDebugScreenPrintf("\nSaved to %s\nPlug the PSP into your computer to see it in PSPM.\n", path);
 }

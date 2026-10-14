@@ -4,17 +4,14 @@ import os
 import random
 import shutil
 import time
-from importlib.resources import files
 from pathlib import Path
 
 import psutil
 
-from . import files as fm
 from . import platform
 from .device import Device
 
 BLOCK = 1 << 20
-APP = files("pspm").joinpath("psp_app/EBOOT.PBP")  # prebuilt from psp/pspm_info; rebuild it when main.c changes
 MODELS = {"01g": "PSP-1000", "02g": "PSP-2000", "03g": "PSP-3000", "04g": "PSP-3000", "05g": "PSP Go",
           "07g": "PSP-3000", "09g": "PSP-3000", "11g": "PSP-E1000 (Street)"}
 HEN = {"0x400": "HEN D / SE-C", "0x700": "M33", "0x800": "M33", "0x1000": "TN / Adrenaline", "0x1003": "PRO"}
@@ -24,13 +21,14 @@ TOOLKIT = {"0": "retail", "1": "testing tool", "2": "development tool"}
 
 
 def install_app(dev: Device, cfg: dict, cat: str = "") -> Path:
-    dest = fm.app_dir(dev, cfg["diag"]["info_app"], cat)
-    (dest / "EBOOT.PBP").write_bytes(APP.read_bytes())
-    return dest
+    """PSPM's PSP app; its INFO mode writes the report read_info reads."""
+    from . import cast  # pulls in Pillow; only needed here
+
+    return cast.install_app(dev, cfg, cat)
 
 
 def read_info(dev: Device, cfg: dict) -> dict:
-    """key=value lines written by the PSP info app, plus 'written' (mtime). Empty if it never ran."""
+    """key=value lines written by the PSP app's INFO mode, plus 'written' (mtime). Empty if it never ran."""
     p = dev.root / cfg["diag"]["info_file"]
     if not p.is_file():
         return {}

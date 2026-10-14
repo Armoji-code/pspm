@@ -1,5 +1,6 @@
-/* PSPM Screen: shows the PC's screen, which PSPM sends over the USB cable or Wi-Fi as 480x272 JPEG frames decoded
-   by the PSP's hardware, and sends the PSP's buttons and stick back to the PC. */
+/* PSPM, PSPM's own PSP app. SCREEN mode shows the PC's screen, which PSPM sends over the USB cable or Wi-Fi as 480x272 JPEG frames decoded
+   by the PSP's hardware, and sends the PSP's buttons and stick back to the PC. CONTROLLER mode makes the PSP
+   PPSSPP's gamepad; INFO mode writes the PSP's battery, firmware and model for PSPM (info.c). */
 #include <pspkernel.h>
 #include <pspctrl.h>
 #include <pspdebug.h>
@@ -22,7 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 
-PSP_MODULE_INFO("PSPM_SCREEN", 0, 1, 1);
+PSP_MODULE_INFO("PSPM", 0, 1, 2);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
 
 int pspmUsbStart(void);
@@ -66,7 +67,8 @@ static volatile int pc = -1; /* the PC's socket over Wi-Fi */
 
 /* Mode, picked in the menu: the PC's screen, or controller for PPSSPP: the memory stick goes to the PC as a USB
    drive (so PPSSPP plays its games and saves) and the buttons go over Wi-Fi, sent as preset 3. */
-static const char *MODES[] = {"SCREEN", "CONTROLLER (PPSSPP)"};
+static const char *MODES[] = {"SCREEN", "CONTROLLER (PPSSPP)", "INFO (FOR PSPM)"};
+void info(const char *app);
 static int mode;
 
 static int rx(void *dst, int size) {
@@ -257,7 +259,7 @@ static void storage(void) {
 static void menu(const char *dir) {
     char file[256];
     unsigned char b[3];
-    int count = 1, ids[NETS + 1] = {0}, row = 0, at = 0;
+    int count = 1, ids[NETS + 1] = {0}, row = 0, at = 0, rows[3], n;
     for (int i = 1; i <= NETS; i++) { /* the networks saved in SETTINGS > NETWORK SETTINGS */
         netData d;
         if (sceUtilityCheckNetParam(i) == 0 && sceUtilityGetNetParam(i, PSP_NETPARAM_NAME, &d) == 0) {
@@ -270,7 +272,7 @@ static void menu(const char *dir) {
     if (f >= 0) {
         if (sceIoRead(f, b, 3) == 3) {
             preset = b[0] < 3 ? b[0] : preset;
-            mode = b[2] < 2 ? b[2] : 0;
+            mode = b[2] < 3 ? b[2] : 0;
             for (int i = 0; i < count; i++)
                 at = ids[i] == b[1] ? i : at;
         }
@@ -279,22 +281,34 @@ static void menu(const char *dir) {
     SceCtrlData c;
     unsigned old = ~0u; /* nothing counts until it's released once */
     for (;;) {
+        n = 0; /* the rows this mode uses: SCREEN all three, CONTROLLER no quality, INFO only the mode */
+        rows[n++] = 0;
+        if (mode == 0)
+            rows[n++] = 1;
+        if (mode < 2)
+            rows[n++] = 2;
+        row = row < n ? row : n - 1;
         pspDebugScreenSetXY(0, 2);
-        pspDebugScreenPrintf("%c MODE         < %-30s >\n\n", row == 0 ? '>' : ' ', MODES[mode]);
-        pspDebugScreenPrintf("%c QUALITY      < %-30s >\n\n", row == 1 ? '>' : ' ', PRESETS[preset]);
-        pspDebugScreenPrintf("%c CONNECTION   < %-30s >\n\n\n", row == 2 ? '>' : ' ', names[at]);
-        pspDebugScreenPrintf("UP/DOWN: PICK   LEFT/RIGHT: CHANGE   CROSS: START   HOME: QUIT");
+        for (int i = 0; i < 3; i++) {
+            const char *label[] = {"MODE", "QUALITY", "CONNECTION"};
+            const char *value[] = {MODES[mode], PRESETS[preset], names[at]};
+            if (i < n)
+                pspDebugScreenPrintf("%c %-12s < %-30s >\n\n", row == i ? '>' : ' ', label[rows[i]], value[rows[i]]);
+            else
+                pspDebugScreenPrintf("%-50s\n\n", "");
+        }
+        pspDebugScreenPrintf("\nUP/DOWN: PICK   LEFT/RIGHT: CHANGE   CROSS: START   HOME: QUIT");
         sceCtrlReadBufferPositive(&c, 1);
         unsigned now = c.Buttons & ~old;
         int step = (now & PSP_CTRL_RIGHT ? 1 : 0) - (now & PSP_CTRL_LEFT ? 1 : 0);
         old = c.Buttons;
         if (now & PSP_CTRL_DOWN)
-            row = (row + 1) % 3;
+            row = (row + 1) % n;
         if (now & PSP_CTRL_UP)
-            row = (row + 2) % 3;
-        if (row == 0)
-            mode = (mode + step + 2) % 2;
-        else if (row == 1)
+            row = (row + n - 1) % n;
+        if (rows[row] == 0)
+            mode = (mode + step + 3) % 3;
+        else if (rows[row] == 1)
             preset = (preset + step + 3) % 3;
         else
             at = (at + step + count) % count;
@@ -311,16 +325,19 @@ static void menu(const char *dir) {
         sceIoClose(f);
     }
     pspDebugScreenClear();
-    pspDebugScreenPrintf("PSPM SCREEN - %s - %s\n\n", mode ? MODES[mode] : PRESETS[preset], names[at]);
+    if (mode == 0)
+        pspDebugScreenPrintf("PSPM - %s - %s\n\n", PRESETS[preset], names[at]);
+    else
+        pspDebugScreenPrintf("PSPM - %s%s%s\n\n", MODES[mode], mode == 1 ? " - " : "", mode == 1 ? names[at] : "");
 }
 
 int main(int argc, char *argv[]) {
     start("callbacks", callbacks, 0x11);
     pspDebugScreenInit();
-    pspDebugScreenPrintf("PSPM SCREEN\n\n");
+    pspDebugScreenPrintf("PSPM\n\n");
 
     load("flash0:/kd/usb.prx"); /* not loaded in every mode; an error here means it already is */
-    char path[256] = "ms0:/PSP/GAME/PSPM_SCREEN/";
+    char path[256] = "ms0:/PSP/GAME/PSPM/";
     if (argc > 0 && strrchr(argv[0], '/') && strlen(argv[0]) < sizeof path - 16) {
         strcpy(path, argv[0]);
         strrchr(path, '/')[1] = 0;
@@ -330,7 +347,7 @@ int main(int argc, char *argv[]) {
     strcat(path, "pspm_usb.prx");
     SceUID m = load(path);
     if (m < 0)
-        stop("Could not load pspm_usb.prx (%08x).\nInstall PSPM Screen again from PSPM.", m);
+        stop("Could not load pspm_usb.prx (%08x).\nInstall the PSP app again from PSPM.", m);
     int r = sceUtilityLoadModule(PSP_MODULE_AV_AVCODEC);
     if (r >= 0)
         r = sceJpegInitMJpeg();
@@ -341,6 +358,11 @@ int main(int argc, char *argv[]) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     menu(dir);
+    if (mode == 2) {
+        info(dir);
+        pspDebugScreenPrintf("\nPress HOME to quit.");
+        sceKernelSleepThread();
+    }
     if (mode && !conn)
         stop("Controller mode sends the buttons over Wi-Fi:\npick a Wi-Fi network in CONNECTION.", 0);
     int server = conn ? wifi() : -1;

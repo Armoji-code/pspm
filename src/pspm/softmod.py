@@ -41,15 +41,15 @@ def files(cfg: dict, ark: str, home: Path, cipl: bool = False) -> list[tuple[Pat
 
 
 def problems(dev: Device, cfg: dict, todo: list[tuple[Path, str]], info: dict) -> list[str]:
-    """What blocks the copy. info is the PSPM Info app's report (diag.read_info), empty when it never ran."""
+    """What blocks the copy. info is the PSP app's INFO report (diag.read_info), empty when it never ran."""
     s, out = cfg["softmod"], []
     fw = info.get("firmware")
     if fw and fw not in s["firmware"]:
         out.append(f"firmware {fw} isn't supported; update the PSP to {' or '.join(s['firmware'])} first")
     battery = info.get("battery", "")
-    # shortcut: the report is from when PSPM Info last ran, so this only catches a known-low battery
+    # shortcut: the report is from when the INFO mode last ran, so this only catches a known-low battery
     if battery.endswith("%") and int(battery[:-1]) < s["min_battery"] and info.get("charger") != "connected":
-        out.append(f"battery was at {battery} without the charger; charge to {s['min_battery']}% and run PSPM Info again")
+        out.append(f"battery was at {battery} without the charger; charge to {s['min_battery']}% and run PSPM's INFO mode on the PSP again")
     need = sum(src.stat().st_size for src, _ in todo)
     if dev.usage().free < need:
         out.append(f"needs {need // 2**20 + 1} MB free on the memory stick")

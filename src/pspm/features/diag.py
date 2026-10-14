@@ -119,7 +119,7 @@ class DiagPage(QWidget):
         except OSError as e:
             self.status.setText(f"[ERROR: {e}]".upper())
             return
-        self.status.setText(f"INSTALLED TO {dest} · RUN PSPM INFO FROM THE GAME MENU".upper())
+        self.status.setText(f"INSTALLED TO {dest} · RUN PSPM FROM THE GAME MENU AND PICK MODE INFO".upper())
 
     def check(self):
         if self.dev:

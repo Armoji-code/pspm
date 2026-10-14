@@ -66,9 +66,9 @@ class SoftmodPage(QWidget):
         if self.info:
             when = time.strftime("%Y-%m-%d %H:%M", time.localtime(self.info["written"]))
             facts = [f"{k} {self.info[k]}" for k in ("model", "firmware", "battery", "charger") if k in self.info]
-            self.known.setText(f"PSPM INFO, {when}: {' · '.join(facts)}".upper())
+            self.known.setText(f"PSP INFO, {when}: {' · '.join(facts)}".upper())
         else:
-            self.known.setText("NO PSPM INFO REPORT (IT NEEDS CUSTOM FIRMWARE) · CONFIRM BELOW")
+            self.known.setText("NO PSP INFO REPORT YET: RUN PSPM ON THE PSP, MODE INFO (IT NEEDS CUSTOM FIRMWARE) · CONFIRM BELOW")
         found = softmod.installed(dev) if dev else None
         if found:
             self.known.setText(f"{found} IS ALREADY ON THE MEMORY STICK · {self.known.text()}".upper())

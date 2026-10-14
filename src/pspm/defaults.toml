@@ -101,10 +101,9 @@ api_url = "https://api.dropboxapi.com/2"
 content_url = "https://content.dropboxapi.com/2"
 chunk_mb = 64             # files bigger than this upload in parts (Dropbox caps one request at 150 MB)
 
-# Diagnostics. Battery, firmware and model can't be read over USB: the PSPM Info app (installed from the
-# DIAGNOSTICS page, needs custom firmware) writes them to info_file when run on the PSP.
+# Diagnostics. Battery, firmware and model can't be read over USB: PSPM's PSP app ([cast] app, installed from
+# the DIAGNOSTICS or STREAMING page, needs custom firmware) writes them to info_file in its INFO mode.
 [diag]
-info_app = "PSPM_INFO"  # folder in the games folder, or in the CAT_ folder picked on the page
 info_file = "PSP/COMMON/pspm_info.txt"
 test_folder = "PSPM_TEST"  # capacity test data, removed after VERIFY
 test_file_mb = 1024        # size of each test file (FAT32 caps files at 4 GB)
@@ -178,16 +177,17 @@ timeout_seconds = 120
 windows = ["{dir}/x64/RemoteJoyLite_EN_64.exe"]
 linux = ["bash", "{dir}/x64_linux/start_linux_EN.sh"]
 
-# Screen streaming, PC to PSP: PSPM Screen (PSPM's own PSP app, psp/pspm_screen) shows frames PSPM sends over USB.
+# Screen streaming, PC to PSP: PSPM's own PSP app (psp/pspm) shows frames PSPM sends over USB or Wi-Fi.
 [cast]
-app = "PSPM_SCREEN"   # folder in the games folder, or in the CAT_ folder picked on the page
+app = "PSPM"          # folder in the games folder, or in the CAT_ folder picked on the page
+old_apps = ["PSPM_SCREEN", "PSPM_INFO"]  # the two apps it replaced, removed when it's installed
 vendor = 0x054C
 product = 0x01C9      # PSPLink's "Type B", so RemoteJoyLite's Windows driver (Zadig) and the udev rule cover it
-bcd_device = 0x0200   # tells PSPM Screen apart from RemoteJoyLite (0x0100) on the same ID
+bcd_device = 0x0200   # tells PSPM's app apart from RemoteJoyLite (0x0100) on the same ID
 endpoint = 0x02       # frames to the PSP
 pad_endpoint = 0x81   # the PSP's buttons and stick back to the PC
 timeout_ms = 2000
-# Wi-Fi (picked in PSPM Screen's menu): PSPM finds the PSP with a UDP broadcast, then streams over TCP.
+# Wi-Fi (picked in the PSP app's menu): PSPM finds the PSP with a UDP broadcast, then streams over TCP.
 wifi_port = 4000
 find_port = 4001
 find_seconds = 3
@@ -211,7 +211,7 @@ audio_capture = ["parec", "--device=@DEFAULT_MONITOR@", "--format=s16le", "--cha
 # (up to 6) and keeps them in psp_controls.json next to config.toml.
 dead_zone = 24        # stick movement ignored around the middle, of 128
 mouse_speed = 12      # pixels per 1/60 s with the stick pushed all the way
-# The quality preset picked in PSPM Screen's menu on the PSP overrides quality, max_fps and captures above.
+# The quality preset picked in the PSP app's menu on the PSP overrides quality, max_fps and captures above.
 [cast.presets.best_quality]
 quality = 92
 max_fps = 20
@@ -262,8 +262,8 @@ right = "pad_right"
 # ARK supports every retail PSP (1000, 2000, 3000, Go, Street E1000) on official firmware 6.60 or 6.61.
 [softmod]
 default = "ark5"             # ark5 | ark4
-firmware = ["6.60", "6.61"]  # blocks the copy when the PSPM Info app reports anything else
-min_battery = 75             # %, asked before copying, and blocks when PSPM Info last saw less without the charger
+firmware = ["6.60", "6.61"]  # blocks the copy when the PSP app's INFO report says anything else
+min_battery = 75             # %, asked before copying, and blocks when the INFO report last saw less without the charger
 timeout_seconds = 120
 
 # ARK-5 through FasterARK (github.com/PSP-Arkfive/FasterARK), lite variant. Upstream re-uses the "latest" tag for

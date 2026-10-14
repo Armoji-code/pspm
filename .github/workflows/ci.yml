@@ -42,22 +42,16 @@ jobs:
     container: ghcr.io/pspdev/pspdev:latest
     steps:
       - uses: actions/checkout@v4
-      - run: make -C psp/pspm_info
       # The app ships prebuilt in src/pspm/psp_app so source installs have it; flag a stale copy.
-      - run: cmp psp/pspm_info/EBOOT.PBP src/pspm/psp_app/EBOOT.PBP || echo "::warning::src/pspm/psp_app/EBOOT.PBP differs from a fresh build; copy it over if main.c changed"
-      - run: make -C psp/pspm_screen
+      - run: make -C psp/pspm
       - run: |
-          cmp psp/pspm_screen/EBOOT.PBP src/pspm/psp_app/screen/EBOOT.PBP && cmp psp/pspm_screen/driver/pspm_usb.prx src/pspm/psp_app/screen/pspm_usb.prx || echo "::warning::src/pspm/psp_app/screen differs from a fresh build of psp/pspm_screen; copy it over if the C files changed"
+          cmp psp/pspm/EBOOT.PBP src/pspm/psp_app/pspm/EBOOT.PBP && cmp psp/pspm/driver/pspm_usb.prx src/pspm/psp_app/pspm/pspm_usb.prx || echo "::warning::src/pspm/psp_app/pspm differs from a fresh build of psp/pspm; copy it over if the C files changed"
       - uses: actions/upload-artifact@v4
         with:
-          name: pspm-info-eboot
-          path: psp/pspm_info/EBOOT.PBP
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pspm-screen
+          name: pspm-psp-app
           path: |
-            psp/pspm_screen/EBOOT.PBP
-            psp/pspm_screen/driver/pspm_usb.prx
+            psp/pspm/EBOOT.PBP
+            psp/pspm/driver/pspm_usb.prx
 
   build:
     needs: [test, psp-app]
