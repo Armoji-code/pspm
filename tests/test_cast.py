@@ -83,6 +83,25 @@ def test_open_says_how_to_start_the_psp_app(tmp_path, monkeypatch):
     assert "01c9" in (tmp_path / "60-psp-b-usb.rules").read_text() and "uinput" in (tmp_path / "60-psp-b-usb.rules").read_text()
 
 
+def test_wifi_search_asks_each_neighbour_too(tmp_path, monkeypatch):
+    import socket
+    import threading
+
+    psp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    psp.bind(("127.0.0.1", 0))
+
+    def answer():
+        data, at = psp.recvfrom(16)
+        if data == b"PSPMFIND":
+            psp.sendto(b"PSPMHERE", at)
+
+    threading.Thread(target=answer, daemon=True).start()
+    monkeypatch.setattr(cast, "_neighbours", lambda: ["127.0.0.1"])  # a firewall drops broadcast answers
+    c = config.load(tmp_path / "x")["cast"] | {"find_port": psp.getsockname()[1]}
+    assert cast.find_psp(c) == "127.0.0.1"
+    psp.close()
+
+
 def test_install_app_into_category_moves_old_copy(tmp_path):
     cfg = config.load(tmp_path / "x")
     dev = device.Device(tmp_path, cfg["device"]["folders"])
