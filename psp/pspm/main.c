@@ -375,9 +375,9 @@ int main(int argc, char *argv[]) {
     start("pad", pad, 0x12);
     if (mode) {
         pspDebugScreenPrintf("The memory stick is on the PC now%s; start your game in PPSSPP.\n", conn ? "" : " (read-only)");
-        pspDebugScreenPrintf(conn ? "In PSPM: STREAMING > START SENDING makes this PSP its controller.\n\nHOME quits."
-                                  : "This PSP is also a USB gamepad: map it once in PPSSPP's control settings.\n\n"
-                                    "HOME quits.");
+        pspDebugScreenPrintf(conn || r == 1 ? "In PSPM: STREAMING > START SENDING makes this PSP its controller.\n\nHOME quits."
+                                            : "This PSP is also a USB gamepad: map it once in PPSSPP's control settings."
+                                              "\n\nHOME quits.");
     } else {
         start("sound", sound, 0x10);
         pspDebugScreenPrintf("Waiting for the PC.\nIn PSPM: STREAMING > START SENDING.\n\nHOME quits.");

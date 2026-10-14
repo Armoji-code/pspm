@@ -2,6 +2,8 @@
    - the vendor device (SCREEN mode): bulk endpoints the PC writes frames to and reads the buttons from;
    - CONTROLLER mode over the cable: one device with two parts, a read-only USB drive of the memory stick (so
      PPSSPP plays its games) and a plain USB gamepad (HID, no driver needed on any OS, like FuSa GamePad).
+     If the PSP refuses the two-part device, the drive alone, with TAIL extra sectors after the stick's end that
+     hold the latest "PSPMPAD1" packet for PSPM on the PC to read.
    Kernel mode, since only kernel code can register a USB driver; the app calls in through syscalls. */
 #include <pspkernel.h>
 #include <pspsdk.h>
@@ -15,6 +17,7 @@ PSP_MODULE_INFO("pspm_usb", PSP_MODULE_KERNEL, 1, 1);
 
 #define DRIVER "PSPMScreenDriver"
 #define DRIVE "PSPMDriveDriver"
+#define TAIL 8
 #define PID 0x1c9 /* PSPLink's and RemoteJoyLite's "Type B": their udev rule and Windows driver already cover it */
 
 /* Same layout as PSPLink/RemoteJoyLite: ep1 bulk in, ep2 and ep3 bulk out. Frames come on ep2, buttons go on ep1. */
@@ -82,6 +85,7 @@ static const unsigned char hid_desc[9] = {9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeo
 
 static struct UsbEndpoint dendp[4] = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {3, 0, 0}};
 static struct UsbInterface dintf = {0xFFFFFFFF, 0, 2};
+static int hid = 1; /* 0: the drive alone, buttons in the tail */
 static struct DeviceDescriptor ddev[2] __attribute__((aligned(16))); /* [0] high speed, [1] full speed */
 static struct epd depd[2][3] __attribute__((aligned(16)));
 static struct ifd difd[2][2];
@@ -96,7 +100,7 @@ static int drive_start(int size, void *args) {
                                  {7, 5, 0x83, 3, 8, 0, s ? 1 : 4}}; /* interrupt: every 1 ms */
         unsigned char i[2][9] = {{9, 4, 0, 0, 2, 8, 6, 0x50, 1},  /* mass storage, SCSI, bulk-only */
                                  {9, 4, 1, 0, 1, 3, 0, 0, 1}};    /* HID, no boot protocol */
-        unsigned char c[9] = {9, 2, 9 + 9 + 2 * 7 + 9 + 9 + 7, 0, 2, 1, 0, 0xC0, 0};
+        unsigned char c[9] = {9, 2, hid ? 9 + 9 + 2 * 7 + 9 + 9 + 7 : 9 + 9 + 2 * 7, 0, hid ? 2 : 1, 1, 0, 0xC0, 0};
         memset(depd[s], 0, sizeof depd[s]);
         for (int k = 0; k < 3; k++)
             memcpy(depd[s][k].d, e[k], 7);
@@ -197,6 +201,7 @@ static int transfer(struct pipe *p, int n, int send) {
    protected, so nothing on the PC can change the stick. */
 static SceUID ms = -1;
 static unsigned ms_sectors;
+static unsigned char pad_now[512] __attribute__((aligned(64)));
 static unsigned char sense[3]; /* key, ASC, ASCQ of the last failure, for REQUEST SENSE */
 
 static unsigned le32(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 | (unsigned)p[3] << 24; }
@@ -208,8 +213,12 @@ static void put_be32(unsigned char *p, unsigned v) {
 static int send_sectors(unsigned lba, unsigned count) {
     while (count) {
         unsigned n = count < sizeof sect / 512 ? count : sizeof sect / 512;
-        if (sceIoLseek(ms, (SceOff)lba * 512, PSP_SEEK_SET) < 0 || sceIoRead(ms, sect, n * 512) != n * 512 ||
-            transfer(&dsect, n * 512, 1) < 0)
+        unsigned real = lba >= ms_sectors ? 0 : ms_sectors - lba < n ? ms_sectors - lba : n;
+        if (real && (sceIoLseek(ms, (SceOff)lba * 512, PSP_SEEK_SET) < 0 || sceIoRead(ms, sect, real * 512) != real * 512))
+            return -1;
+        for (unsigned i = real; i < n; i++)
+            memcpy(sect + i * 512, pad_now, 512);
+        if (transfer(&dsect, n * 512, 1) < 0)
             return -1;
         lba += n;
         count -= n;
@@ -248,13 +257,13 @@ static void command(const unsigned char *cbw) {
         n = 8;
         break;
     case 0x25: /* READ CAPACITY (10): last sector, sector size */
-        put_be32(r, ms_sectors - 1);
+        put_be32(r, ms_sectors + (hid ? 0 : TAIL) - 1);
         put_be32(r + 4, 512);
         n = 8;
         break;
     case 0x28: { /* READ (10) */
         unsigned lba = be32(cb + 2), count = cb[7] << 8 | cb[8];
-        if (lba + count > ms_sectors || count * 512 > want || send_sectors(lba, count) < 0)
+        if (lba + count > ms_sectors + (hid ? 0 : TAIL) || count * 512 > want || send_sectors(lba, count) < 0)
             fail = 1, sense[0] = 3, sense[1] = 0x11; /* MEDIUM ERROR, unrecovered read error */
         else
             sent = count * 512;
@@ -352,7 +361,8 @@ static int user_ptr(const void *p, int size) { /* a user pointer only, never ker
     return !(((unsigned)p | ((unsigned)p + size)) >> 31);
 }
 
-/* as_drive 0: the vendor device for frames and buttons. 1: the read-only drive and the gamepad. */
+/* as_drive 0: the vendor device for frames and buttons. 1: the read-only drive and the gamepad; returns 1 when
+   only the drive started (the buttons are then in its tail). */
 int pspmUsbStart(int as_drive) {
     int k1 = pspSdkSetK1(0), r = 0;
     drive = as_drive;
@@ -364,13 +374,24 @@ int pspmUsbStart(int as_drive) {
         r = sceUsbStart(drive ? DRIVE : DRIVER, 0, 0);
     if (r >= 0)
         r = sceUsbActivate(PID);
+    if (r < 0 && drive) { /* the two-part device refused: the drive alone, buttons in the tail */
+        sceUsbStop(DRIVE, 0, 0);
+        dintf.num_interface = 1;
+        hid = 0;
+        r = sceUsbStart(DRIVE, 0, 0);
+        if (r >= 0)
+            r = sceUsbActivate(PID);
+    }
     started = r >= 0;
     if (started && drive) {
         SceUID t = sceKernelCreateThread("pspm_drive", drive_thread, 0x18, 0x2000, 0, NULL);
-        SceUID h = sceKernelCreateThread("pspm_gamepad", hid_thread, 0x17, 0x1000, 0, NULL);
-        r = t < 0 ? t : h < 0 ? h : sceKernelStartThread(t, 0, NULL);
+        r = t < 0 ? t : sceKernelStartThread(t, 0, NULL);
+        if (r >= 0 && hid) {
+            SceUID h = sceKernelCreateThread("pspm_gamepad", hid_thread, 0x17, 0x1000, 0, NULL);
+            r = h < 0 ? h : sceKernelStartThread(h, 0, NULL);
+        }
         if (r >= 0)
-            r = sceKernelStartThread(h, 0, NULL);
+            r = hid ? 0 : 1;
     }
     pspSdkSetK1(k1);
     return r;
@@ -395,13 +416,16 @@ int pspmUsbRead(void *dst, int size) {
     return got;
 }
 
-/* Send up to 512 bytes to the PC. Waits until the PC reads them; returns size, or < 0. With the drive on, the
-   gamepad sends the buttons itself, so it returns at once (the caller waits for the vblank). */
+/* Send up to 512 bytes to the PC. Waits until the PC reads them; returns size, or < 0. With the drive on it
+   returns at once (the caller waits for the vblank): the gamepad sends the buttons itself, or they become what
+   the PC reads after the stick's end. */
 int pspmUsbWrite(const void *src, int size) {
     if (!user_ptr(src, size) || size <= 0 || size > pout.size)
         return -1;
     int k1 = pspSdkSetK1(0), r = size;
-    if (!drive) {
+    if (drive && !hid)
+        memcpy(pad_now, src, size);
+    else if (!drive) {
         memcpy(pout.buf, src, size);
         r = transfer(&pout, size, 1);
     }

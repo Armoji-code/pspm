@@ -310,3 +310,27 @@ def test_controller_mode_sends_no_frames_and_picks_gaming(tmp_path, monkeypatch)
     cast.send(cfg, lambda: False, m=m, switched=names.append)  # returns once the PSP goes away
     assert names == ["GAMING"] and ("pad_a", True) in did and b"PSPMAUD1" not in sent
     assert sent.count(b"PSPMSCR2") <= 1  # at most the frame already on its way before the first pad packet
+
+
+def test_controller_over_the_cable_reads_the_drive(tmp_path, monkeypatch):
+    import usb.core
+
+    cfg = config.load(tmp_path / "x")
+    packets = [b"PSPMPAD1" + struct.pack("<IBBBB", 0x4000, 128, 128, 3, 0)]
+
+    class Tail:
+        def read(self):
+            if not packets:
+                raise OSError("No such device")
+            return packets.pop()
+
+    monkeypatch.setattr(cast.stream.tools, "ROOT", tmp_path)
+    monkeypatch.setattr(platform.current(), "stream_ready", lambda rule, pw: None)
+    monkeypatch.setattr(usb.core, "find", lambda **kw: None)
+    monkeypatch.setattr(platform.current(), "psp_drive", lambda c: Tail(), raising=False)
+    psp = cast.open_psp(cfg)
+    assert isinstance(psp, cast.Drive) and psp.write(2, b"frame") == 0
+    assert controls.parse(psp.read(0x81, 512, 200)) == (0x4000, 128, 128)
+    with pytest.raises(usb.core.USBError):
+        psp.read(0x81, 512, 200)  # unplugged
+    assert 'ATTRS{bcdDevice}=="0300"' in (tmp_path / "60-psp-b-usb.rules").read_text()
