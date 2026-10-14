@@ -1,4 +1,5 @@
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QThread, Signal
@@ -87,6 +88,17 @@ class SavesPage(QWidget):
         self.job.step.connect(lambda t: self.status.setText(f"{msg} {t.upper()}"))
         self.job.start()
 
+    @contextmanager
+    def _lock(self):
+        """saves.LOCK, saying so while the cloud backup page holds it (it reads every save first)."""
+        if not saves.LOCK.acquire(blocking=False):
+            self._say("waiting for cloud backup")
+            saves.LOCK.acquire()
+        try:
+            yield
+        finally:
+            saves.LOCK.release()
+
     def _say(self, text):
         self.job.step.emit(text)  # called from the worker thread; the signal hops back to the UI
 
@@ -129,7 +141,7 @@ class SavesPage(QWidget):
             self.status.setText("[NO PSP CONNECTED]" if not self.dev else "[PPSSPP NOT FOUND · PICK ITS SAVEDATA FOLDER]")
             return
         def work():
-            with saves.LOCK:  # the cloud backup page syncs too, and writes the same state file
+            with self._lock():  # the cloud backup page syncs too, and writes the same state file
                 self.state = saves.load_state(self.state_file)
                 items = saves.plan(*dirs, self.state["last"], self._say, self.state.setdefault("hashes", {}))
                 saves.save_state(self.state, self.state_file)
@@ -195,9 +207,12 @@ class SavesPage(QWidget):
         if not (dirs and self.items):
             return
         items = self.items
+        if all(i.action == saves.SAME for i in items):
+            self.status.setText(f"IN SYNC · {len(items)} SAVES" + self.games)  # nothing to copy
+            return
 
         def work():
-            with saves.LOCK:
+            with self._lock():
                 self.state = saves.load_state(self.state_file)
                 run = saves.apply(items, *dirs, self.state["last"], self.backups, self._say, self.state.setdefault("hashes", {}))
                 saves.save_state(self.state, self.state_file)
