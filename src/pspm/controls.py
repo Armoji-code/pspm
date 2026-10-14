@@ -1,4 +1,4 @@
-"""PSP controls on the PC: PSPM Screen sends the PSP's buttons and stick back over USB, and this turns them into
+"""PSP controls on the PC: PSPM's PSP app sends the PSP's buttons and stick back over USB, and this turns them into
 keys, mouse or gamepad input through the OS layer (platform.<os>.Input). No UI."""
 import json
 import struct
@@ -42,7 +42,7 @@ def save(m: dict, path: Path = FILE) -> None:
 
 
 def parse(packet: bytes) -> tuple[int, int, int] | None:
-    """(buttons, stick x, stick y) from PSPM Screen's "PSPMPAD1" packet; the stick is 0-255, 128 in the middle."""
+    """(buttons, stick x, stick y) from the PSP app's "PSPMPAD1" packet; the stick is 0-255, 128 in the middle."""
     return struct.unpack_from("<IBB", packet, 8) if len(packet) >= 14 and packet[:8] == b"PSPMPAD1" else None
 
 

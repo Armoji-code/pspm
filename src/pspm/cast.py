@@ -1,7 +1,8 @@
-"""PC screen to the PSP: PSPM Screen (psp/pspm_screen) runs on the PSP and shows the frames this sends over the
+"""PC screen to the PSP: PSPM's PSP app (psp/pspm) runs on the PSP and shows the frames this sends over the
 USB cable or Wi-Fi. Like PSP to PC streaming, it works while the PSP is out of USB mode. No UI."""
 import io
 import select
+import shutil
 import socket
 import struct
 import threading
@@ -18,18 +19,22 @@ from . import files as fm
 from .device import Device
 
 W, H = 480, 272
-MAX_JPEG = 256 * 1024  # PSPM Screen's frame buffer
-# picked in PSPM Screen's menu, sent in each pad packet; "controller": the PSP only sends its buttons (for PPSSPP,
+MAX_JPEG = 256 * 1024  # the PSP app's frame buffer
+# picked in the PSP app's menu, sent in each pad packet; "controller": the PSP only sends its buttons (for PPSSPP,
 # its memory stick shared over USB), so no frames go to it
 PRESETS = ["best_quality", "balanced", "best_fps", "controller"]
 GAMEPAD = "GAMING"  # the profile controller mode switches to, when there is one
 AUDIO = ["off", "on", "best"]  # the PSP's note button steps through these; [cast] audio_rates gives each a sample rate
 ZOOMS = [1, 2, 3]  # SELECT + START on the PSP steps through these, zoomed in where the mouse is
 ARROW = [(0, 0), (0, 16), (4, 12), (7, 18), (9, 17), (6, 11), (11, 11)]  # the mouse pointer, 16 px tall
-APP = files("pspm").joinpath("psp_app/screen")  # prebuilt from psp/pspm_screen; rebuild when its C files change
+APP = files("pspm").joinpath("psp_app/pspm")  # prebuilt from psp/pspm; rebuild when its C files change
 
 
 def install_app(dev: Device, cfg: dict, cat: str = "") -> Path:
+    """PSPM's PSP app (screen, controller and info modes) into games/<cat>/; the older separate apps go."""
+    for old in cfg["cast"]["old_apps"]:
+        if found := fm.find_app(dev, old):
+            shutil.rmtree(found)
     dest = fm.app_dir(dev, cfg["cast"]["app"], cat)
     for name in ("EBOOT.PBP", "pspm_usb.prx"):
         (dest / name).write_bytes(APP.joinpath(name).read_bytes())
@@ -76,7 +81,7 @@ def frame(img: Image.Image, quality: int, note: str = "") -> bytes:
 
 
 class Net:
-    """PSPM Screen over Wi-Fi: the same stream as over USB, on one TCP connection, with pyusb's read/write and
+    """The PSP app over Wi-Fi: the same stream as over USB, on one TCP connection, with pyusb's read/write and
     errors so the rest doesn't care which it is."""
 
     def __init__(self, host: str, c: dict):
@@ -112,7 +117,7 @@ class Net:
 
 
 def find_psp(c: dict) -> str | None:
-    """The address of a PSP running PSPM Screen on Wi-Fi: [cast] wifi_host, else whoever answers a broadcast."""
+    """The address of a PSP running PSPM's app on Wi-Fi: [cast] wifi_host, else whoever answers a broadcast."""
     if c.get("wifi_host"):
         return c["wifi_host"]
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -134,7 +139,7 @@ def find_psp(c: dict) -> str | None:
 
 
 def open_psp(cfg: dict, password: str | None = None):
-    """The PSP running PSPM Screen: over libusb when the cable is in, else over Wi-Fi. On Linux the first call
+    """The PSP running PSPM's app: over libusb when the cable is in, else over Wi-Fi. On Linux the first call
     allows the PSP's USB (one password)."""
     import usb.core  # pyusb; imported here so the rest of PSPM never needs libusb
 
@@ -156,7 +161,7 @@ def open_psp(cfg: dict, password: str | None = None):
             raise OSError(f"PSP found at {host} but could not connect: {e}") from None
     if no_libusb:
         raise OSError("libusb not found: install it from the SETUP page (Wi-Fi: no PSP answered either)")
-    raise OSError("PSP not found: start PSPM SCREEN on the PSP (cable in, or Wi-Fi picked in its menu). "
+    raise OSError("PSP not found: start PSPM on the PSP (cable in, or Wi-Fi picked in its menu). "
                   "If it shows a Wi-Fi address, a firewall may block the search: set [cast] wifi_host to it")
 
 

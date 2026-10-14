@@ -1,4 +1,4 @@
-/* PSPM Screen's USB driver: a vendor device with bulk endpoints the PC writes frames to. Kernel mode, since only
+/* PSPM's USB driver: a vendor device with bulk endpoints the PC writes frames to. Kernel mode, since only
    kernel code can register a USB driver; the app calls pspmUsbStart/Read/Write through syscalls. */
 #include <pspkernel.h>
 #include <pspsdk.h>

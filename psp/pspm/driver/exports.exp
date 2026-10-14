@@ -6,7 +6,7 @@ PSP_EXPORT_FUNC(module_stop)
 PSP_EXPORT_VAR(module_info)
 PSP_EXPORT_END
 
-# 0x4001: callable from user mode (the PSPM Screen app) through syscalls
+# 0x4001: callable from user mode (PSPM's PSP app) through syscalls
 PSP_EXPORT_START(pspm_usb, 0, 0x4001)
 PSP_EXPORT_FUNC(pspmUsbStart)
 PSP_EXPORT_FUNC(pspmUsbRead)

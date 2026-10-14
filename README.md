@@ -64,7 +64,7 @@ Other clouds can be added by another package: subclass `pspm.backup.Provider` an
 - **Space**: used, free and total on the memory stick.
 - **Check filesystem**: a read-only check (`fsck.vfat -n` on Linux, `chkdsk` on Windows). Both need admin rights, so you get a password or UAC prompt. Nothing is repaired.
 - **Test capacity**: finds fake memory sticks. PSPM fills the free space with test data; you unplug and replug the PSP, then press VERIFY CAPACITY to read it back, and the test data is deleted. It takes a while on a big stick. On a fake card, writing past its real size can damage files already on it, so back up first.
-- **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM Info* from the PSP's Game menu (needs custom firmware), and the next time you plug in PSPM shows them. The app ships prebuilt in `src/pspm/psp_app/`; its source is in `psp/pspm_info` (rebuild with the PSPDEV toolchain: `make -C psp/pspm_info`, then copy `EBOOT.PBP` over).
+- **PSP info**: battery, firmware and model can't be read over USB. Press INSTALL INFO APP, run *PSPM* from the PSP's Game menu (needs custom firmware) and pick MODE: INFO, and the next time you plug in PSPM shows them. It's the same PSP app as streaming uses; it ships prebuilt in `src/pspm/psp_app/pspm/` and its source is in `psp/pspm` (rebuild with the PSPDEV toolchain: `make -C psp/pspm`, then copy `EBOOT.PBP` and `driver/pspm_usb.prx` over).
 
 ## PS1 converter
 
@@ -89,20 +89,20 @@ The plugin and viewer are [RemoteJoyLite](https://github.com/Kethen/RemoteJoyLit
 
 ### PC to PSP
 
-Shows the PC's screen on the PSP, over the cable or Wi-Fi, with PSPM's own PSP app, PSPM Screen. The PSP's buttons and stick control the PC.
+Shows the PC's screen on the PSP, over the cable or Wi-Fi, with PSPM's own PSP app, also called PSPM. The PSP's buttons and stick control the PC.
 
-1. With the PSP in USB mode, press INSTALL PSP APP. It copies `EBOOT.PBP` and its USB driver `pspm_usb.prx` to `PSP/GAME/PSPM_SCREEN`.
-2. Leave USB mode and start PSPM Screen on the PSP. In its menu pick the quality and the connection: USB (cable in) or one of the networks saved in the PSP's SETTINGS > NETWORK SETTINGS.
+1. With the PSP in USB mode, press INSTALL PSP APP. It copies `EBOOT.PBP` and its USB driver `pspm_usb.prx` to `PSP/GAME/PSPM` (and removes the older `PSPM_SCREEN` and `PSPM_INFO` apps it replaces).
+2. Leave USB mode and start PSPM on the PSP. In its menu pick MODE: SCREEN, the quality and the connection: USB (cable in) or one of the networks saved in the PSP's SETTINGS > NETWORK SETTINGS.
 3. Press START SENDING. STOP SENDING or HOME on the PSP ends it.
 
 - Linux: Wayland needs `grim` (wlroots desktops such as Sway and Hyprland; GNOME and KDE Wayland aren't supported yet); X11 needs nothing. The first start asks for your password once for the same udev rule as the viewer.
 - Windows: uses the same libusb-win32 driver as the viewer (Zadig, *PSP Type B*).
 - RemoteJoyLite blocks other USB drivers while it's on for games: REMOVE PLUGIN and restart the PSP first.
 - Wi-Fi: the PSP shows its address once it joins. PSPM tries USB first, then finds the PSP with a UDP broadcast (port 4001) and streams over TCP (port 4000). If a firewall blocks the search, set `[cast] wifi_host` to the address the PSP shows. The PSP's Wi-Fi is 802.11b, so expect a lower frame rate than over USB; BEST FPS helps.
-- Frames are 480x272 JPEGs decoded by the PSP's hardware. PSPM Screen opens with a menu: pick BEST QUALITY, BALANCED or BEST FPS (left/right) and press ✕; each preset sets `quality`, `max_fps` and `captures` (`[cast.presets.*]`). The status shows the preset, the frame rate and how long each screen capture takes; several screen grabs run at once so a slow grab (grim takes ~250 ms) doesn't cap the frame rate.
+- Frames are 480x272 JPEGs decoded by the PSP's hardware. The PSP app opens with a menu: pick BEST QUALITY, BALANCED or BEST FPS (left/right) and press ✕; each preset sets `quality`, `max_fps` and `captures` (`[cast.presets.*]`). The status shows the preset, the frame rate and how long each screen capture takes; several screen grabs run at once so a slow grab (grim takes ~250 ms) doesn't cap the frame rate.
 - The mouse pointer is drawn on the PSP. SELECT + START zooms in 2x or 3x around it, and again back to 1x. Linux: the PSP's mouse moves to absolute positions so PSPM knows where the pointer is (Wayland doesn't tell); after you move your own mouse, the PSP's pointer picks up where the PSP left it.
 - Sound: if it fails, the PSP shows AUDIO ERROR and the reason, and the status says it too.
-- PPSSPP with the PSP as its controller: in PSPM Screen pick MODE: CONTROLLER (PPSSPP) and a Wi-Fi network. The PSP shares its memory stick over USB like USB mode (so PPSSPP plays its ISOs and saves through the SAVES page's links) and sends its buttons over Wi-Fi; START SENDING turns them into the virtual gamepad, switching to the GAMING profile. Map the gamepad once in PPSSPP's control settings.
+- PPSSPP with the PSP as its controller: in the PSP app pick MODE: CONTROLLER (PPSSPP) and a Wi-Fi network (QUALITY is hidden in this mode). The PSP shares its memory stick over USB like USB mode (so PPSSPP plays its ISOs and saves through the SAVES page's links) and sends its buttons over Wi-Fi; START SENDING turns them into the virtual gamepad, switching to the GAMING profile. Map the gamepad once in PPSSPP's control settings.
 - Controls: click a button or the stick on the PSP drawing to pick what it does: a key, a mouse button, a gamepad button, or nothing; the stick can be a gamepad stick, the mouse, the arrow keys or WASD. Picks apply at once and are kept in `psp_controls.json` next to `config.toml`. Pressed buttons light up on the drawing. By default the PSP is a gamepad.
 - Linux: the controls are virtual devices made through `/dev/uinput`, which the same udev rule allows (PSPM asks for your password once more if your rule is from an older version). Windows: keys and mouse work; gamepad buttons need a virtual-controller driver and do nothing for now.
 
@@ -114,11 +114,11 @@ Copies the official ARK files to the memory stick so you can install ARK on the 
 **Not supported:** other firmware (update to 6.61 with Sony's updater first), PS Vita, development units. Already on ARK-4 or ARK-5: pick Update, which copies ARK's own updater (`PSP/GAME/UPDATE`) and keeps your settings and plugins. PSPM preselects it when it finds `PSP/SAVEDATA/ARK_01234` on the stick. On PRO or ME with a permanent cIPL: follow ARK's DC10 guide instead.
 
 1. Pick ARK-5 (default, via [FasterARK](https://github.com/PSP-Arkfive/FasterARK)) or ARK-4's final release ([v4.20.69 r206](https://github.com/PSP-Archive/ARK-4), archived August 2026).
-2. Tick the boxes: firmware (skipped when the PSPM Info app already reported it), battery at 75% or more with the charger in, and the risk.
+2. Tick the boxes: firmware (skipped when the PSP app's INFO mode already reported it), battery at 75% or more with the charger in, and the risk.
 3. Press COPY ARK. PSPM checks the firmware and free space, shows what it will copy, moves any ARK folders already there to a backup, copies, and reads every file back.
 4. On the PSP, leave USB mode, keep the charger in, and run FasterARK (ARK-5) or ARK Loader (ARK-4) from the Game menu.
 
-ARK then runs until a full power-off, after which you run the same app again. To make it permanent, tick the cIPL box before copying: PSPM warns you again, then also copies ARK's cIPL installer (`CustomIPL` for ARK-5, `ARK_cIPL` for ARK-4). Run it on the PSP only once ARK works, with the charger in. It writes the PSP's flash, and a power cut while it runs can brick the console. If the PSPM Info app last saw the battery below 75% without the charger, PSPM refuses to copy.
+ARK then runs until a full power-off, after which you run the same app again. To make it permanent, tick the cIPL box before copying: PSPM warns you again, then also copies ARK's cIPL installer (`CustomIPL` for ARK-5, `ARK_cIPL` for ARK-4). Run it on the PSP only once ARK works, with the charger in. It writes the PSP's flash, and a power cut while it runs can brick the console. If the PSP app's INFO mode last saw the battery below 75% without the charger, PSPM refuses to copy.
 Both releases are downloaded on first use from GitHub and checked against the sha256 in `defaults.toml`. FasterARK reuses one `latest` tag, so its next release will be refused until the url and sha256 there are updated.
 
 ## Themes
