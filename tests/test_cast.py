@@ -5,7 +5,7 @@ import struct
 import pytest
 from PIL import Image
 
-from pspm import cast, config, device, platform
+from pspm import cast, config, controls, device, platform
 
 
 def test_frame_is_header_then_letterboxed_jpeg():
@@ -270,3 +270,41 @@ def test_sound_recorder_that_quits_says_why():
     with pytest.raises(OSError, match="Connection refused"):
         rec.read(4096)
     rec.close()
+
+
+def test_controller_mode_sends_no_frames_and_picks_gaming(tmp_path, monkeypatch):
+    import usb.core
+
+    cfg = config.load(tmp_path / "x")
+    pad = [b"PSPMPAD1" + struct.pack("<IBBBB", 0x4000, 128, 128, 3, 0)] * 3
+    sent, did, names = [], [], []
+
+    class Psp:
+        def write(self, ep, data, timeout):
+            sent.append(data[:8])
+
+        def read(self, ep, size, timeout):
+            if not pad:
+                raise usb.core.USBError("gone")
+            return pad.pop(0)
+
+    class Input:
+        def __init__(self, name):
+            pass
+
+        def key(self, t, down):
+            did.append((t, down))
+
+        def stick(self, x, y):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cast, "open_psp", lambda cfg, pw: Psp())
+    monkeypatch.setattr(platform.current(), "capture", lambda c: Image.new("RGB", (640, 480)), raising=False)
+    monkeypatch.setattr(platform.current(), "Input", Input)
+    m = controls.load(cfg, tmp_path / "c.json")
+    cast.send(cfg, lambda: False, m=m, switched=names.append)  # returns once the PSP goes away
+    assert names == ["GAMING"] and ("pad_a", True) in did and b"PSPMAUD1" not in sent
+    assert sent.count(b"PSPMSCR2") <= 1  # at most the frame already on its way before the first pad packet

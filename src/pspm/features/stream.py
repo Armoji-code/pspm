@@ -30,6 +30,7 @@ CAST_STEPS = """PC TO PSP
 1. WITH THE PSP IN USB MODE, PRESS INSTALL PSP APP.
 2. LEAVE USB MODE AND START PSPM SCREEN ON THE PSP.
 3. IN ITS MENU PICK A QUALITY AND A CONNECTION: USB (CABLE IN) OR ONE OF THE PSP'S SAVED WI-FI NETWORKS (SAME NETWORK AS THE PC). PRESS ✕, THEN PRESS START SENDING. YOUR SCREEN SHOWS ON THE PSP; ITS BUTTONS AND STICK CONTROL THE PC; SELECT SWITCHES BETWEEN THE CONTROLS PROFILES BELOW, SELECT + START ZOOMS 1X / 2X / 3X WHERE THE MOUSE IS, ♪ TURNS THE PC'S SOUND OFF / ON / BEST. HOME ON THE PSP QUITS.
+PPSSPP: PICK MODE CONTROLLER (PPSSPP) AND A WI-FI NETWORK IN PSPM SCREEN. THE MEMORY STICK GOES TO THE PC SO PPSSPP PLAYS ITS GAMES AND SAVES, AND START SENDING MAKES THE PSP A GAMEPAD (GAMING PROFILE).
 
 REMOTEJOYLITE BLOCKS THIS WHILE IT'S ON FOR GAMES: REMOVE PLUGIN AND RESTART THE PSP FIRST.
 LINUX: WAYLAND NEEDS GRIM (SWAY, HYPRLAND...) AND SOUND NEEDS PAREC; THE SETUP PAGE INSTALLS BOTH.
@@ -164,7 +165,8 @@ class StreamPage(QWidget):
         self.sending = True
         self._cast(lambda: cast.send(self.cfg, lambda: not self.sending,
                                      lambda n, ms, preset: self.cast_job.step.emit(
-                                         f"SENDING · {_name(preset)} · {n} FPS · CAPTURE {ms} MS"),
+                                         "PSP IS THE CONTROLLER · START YOUR GAME IN PPSSPP" if preset == "controller"
+                                         else f"SENDING · {_name(preset)} · {n} FPS · CAPTURE {ms} MS"),
                                      password, self.controls, self.pad_state.emit, self.switched.emit),
                    "CONNECTING TO THE PSP…", lambda _: self.cast_status.setText("STOPPED"))
 
