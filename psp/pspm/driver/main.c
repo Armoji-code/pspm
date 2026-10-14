@@ -79,14 +79,14 @@ struct sets { struct ifd *ifd; unsigned alt, n; };
 struct cfd { unsigned char d[12]; struct sets *s; const void *extra; int len; };
 struct conf { struct cfd *c; struct sets *s; struct ifd *i; struct epd *e; };
 
-/* The gamepad's 5-byte report: X, Y, the d-pad as a hat (8 = centred), 12 buttons. */
+/* The gamepad's 5-byte report: X, Y, the d-pad as a hat (8 = centred), 16 buttons. */
 static const unsigned char report_desc[] __attribute__((aligned(64))) = {
     0x05, 0x01, 0x09, 0x05, 0xA1, 0x01,                         /* generic desktop, gamepad, application */
     0x09, 0x30, 0x09, 0x31, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x02, 0x81, 0x02, /* X, Y: 0..255 */
     0x09, 0x39, 0x15, 0x00, 0x25, 0x07, 0x35, 0x00, 0x46, 0x3B, 0x01, 0x65, 0x14,             /* hat: 0..7, */
     0x75, 0x04, 0x95, 0x01, 0x81, 0x42, 0x65, 0x00, 0x81, 0x03,                               /* 8 = none */
-    0x05, 0x09, 0x19, 0x01, 0x29, 0x0C, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x0C, 0x81, 0x02, /* buttons */
-    0x75, 0x04, 0x95, 0x01, 0x81, 0x03, 0xC0};
+    0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x10, 0x81, 0x02, /* buttons */
+    0xC0};
 static const unsigned char hid_desc[9] = {9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeof report_desc, 0};
 
 static struct UsbEndpoint dendp[4] = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {3, 0, 0}};
@@ -334,8 +334,11 @@ static int drive_thread(SceSize args, void *argp) {
 
 /* The gamepad: the buttons and stick as a report every 4 ms (each waits for the PC to take the last one). */
 static int hid_thread(SceSize args, void *argp) {
-    static const unsigned buttons[12] = {PSP_CTRL_CROSS, PSP_CTRL_CIRCLE, PSP_CTRL_SQUARE, PSP_CTRL_TRIANGLE,
-                                         PSP_CTRL_LTRIGGER, PSP_CTRL_RTRIGGER, PSP_CTRL_SELECT, PSP_CTRL_START,
+    /* Linux makes gamepad button n the key BTN_GAMEPAD + n - 1 (BTN_A, BTN_B, BTN_C, BTN_NORTH, BTN_WEST, BTN_Z,
+       BTN_TL, BTN_TR, BTN_TL2, BTN_TR2, BTN_SELECT, BTN_START, BTN_MODE, BTN_THUMBL, BTN_THUMBR), and SDL (PPSSPP)
+       only knows the usual ones, so each PSP button sits on its usual key and C, Z, TL2, TR2 stay unused. */
+    static const unsigned buttons[16] = {PSP_CTRL_CROSS, PSP_CTRL_CIRCLE, 0, PSP_CTRL_TRIANGLE, PSP_CTRL_SQUARE, 0,
+                                         PSP_CTRL_LTRIGGER, PSP_CTRL_RTRIGGER, 0, 0, PSP_CTRL_SELECT, PSP_CTRL_START,
                                          PSP_CTRL_NOTE, PSP_CTRL_VOLDOWN, PSP_CTRL_VOLUP, PSP_CTRL_SCREEN};
     static const unsigned char hat[9] = {7, 0, 1, 6, 8, 2, 5, 4, 3}; /* by (y + 1) * 3 + x + 1 */
     SceCtrlData c;
@@ -344,7 +347,7 @@ static int hid_thread(SceSize args, void *argp) {
         int x = !!(c.Buttons & PSP_CTRL_RIGHT) - !!(c.Buttons & PSP_CTRL_LEFT);
         int y = !!(c.Buttons & PSP_CTRL_DOWN) - !!(c.Buttons & PSP_CTRL_UP);
         unsigned b = 0;
-        for (int i = 0; i < 12; i++)
+        for (int i = 0; i < 16; i++)
             b |= c.Buttons & buttons[i] ? 1u << i : 0;
         hid_buf[0] = c.Lx, hid_buf[1] = c.Ly, hid_buf[2] = hat[(y + 1) * 3 + x + 1], hid_buf[3] = b, hid_buf[4] = b >> 8;
         if (transfer(&dhid, 5, 1) < 0)
