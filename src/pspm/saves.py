@@ -25,6 +25,7 @@ STATE = user_data_path("pspm") / "saves.json"
 BACKUPS = user_data_path("pspm") / "save-backups"
 TO_PC, TO_PSP, SAME, SKIP = "PSP → PC", "PC → PSP", "SAME", "SKIP"
 TMP = ".pspm-tmp"
+OLD = ".pspm-old"  # the save being replaced, beside it until the copy is in place
 LOCK = threading.Lock()
 
 
@@ -113,8 +114,12 @@ def ppsspp_dir(cfg: dict, state: dict) -> Path | None:
 def plan(psp: Path, pc: Path, last: dict, progress=lambda text: None, cache: dict | None = None) -> list[Item]:
     """`cache` (state["hashes"]) is pruned to the folders seen now."""
     seen = {}
+    for d in (psp, pc):  # a sync stopped between moving the old save aside and the new one in: put the old back
+        for old in d.glob(f"*{OLD}") if d.is_dir() else ():
+            if not old.with_name(old.name[: -len(OLD)]).exists():
+                old.rename(old.with_name(old.name[: -len(OLD)]))
     # shortcut: one sync history for all PSPs; a second PSP's saves show as changes (still backed up). Key by PSP if needed.
-    names = sorted({p.name for d in (psp, pc) if d.is_dir() for p in d.iterdir() if p.is_dir() and TMP not in p.name})
+    names = sorted({p.name for d in (psp, pc) if d.is_dir() for p in d.iterdir() if p.is_dir() and TMP not in p.name and OLD not in p.name})
     out = []
     for i, n in enumerate(names, 1):
         progress(f"{i}/{len(names)} {n}")
@@ -123,9 +128,11 @@ def plan(psp: Path, pc: Path, last: dict, progress=lambda text: None, cache: dic
         conflict = False
         if a == b:
             action = SAME
-        elif not b or last.get(n) == b:  # missing on PC, or only the PSP changed
+        elif not a or not b:  # on one side only: copy it over (a save deleted on one side comes back)
+            action = TO_PSP if b else TO_PC
+        elif last.get(n) == b:  # only the PSP changed
             action = TO_PC
-        elif not a or last.get(n) == a:
+        elif last.get(n) == a:
             action = TO_PSP
         else:
             action, conflict = (TO_PC if ta >= tb else TO_PSP), True
@@ -160,12 +167,15 @@ def apply(items: list[Item], psp: Path, pc: Path, last: dict, backups: Path = BA
 
 def _copy(src: Path, dst: Path, backup: Path, h: str, cache: dict | None) -> None:
     # Copy beside dst first, so an unplug mid-copy leaves the old save in place.
-    tmp = dst.with_name(dst.name + TMP)
+    # The old one is renamed aside (instant, same drive) and only backed up once the new one is in place.
+    tmp, old = dst.with_name(dst.name + TMP), dst.with_name(dst.name + OLD)
     shutil.rmtree(tmp, ignore_errors=True)
     shutil.copytree(src, tmp)
     if dst.exists():
-        backup.mkdir(parents=True, exist_ok=True)
-        shutil.move(dst, backup / dst.name)
+        dst.rename(old)
     tmp.rename(dst)
+    if old.exists():
+        backup.mkdir(parents=True, exist_ok=True)
+        shutil.move(old, backup / dst.name)
     if cache is not None:  # the copy has src's content, so the next check needn't read it back
         cache[str(dst)] = [_sig(_files(dst)), h]

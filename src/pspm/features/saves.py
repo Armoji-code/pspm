@@ -168,10 +168,11 @@ class SavesPage(QWidget):
         for r, it in enumerate(self.items):
             for c, text in enumerate([it.name, side(it.psp_time, it.psp_desc), side(it.pc_time, it.pc_desc)]):
                 self.table.setItem(r, c, QTableWidgetItem(text))
-            if it.conflict:
+            if it.action != saves.SAME:  # any copy can be turned around or skipped
                 box = QComboBox()
-                box.addItems([saves.TO_PC, saves.TO_PSP, saves.SKIP])
-                box.setCurrentText(it.action)  # newest side suggested
+                box.addItems([a for a, src in ((saves.TO_PC, it.psp_hash), (saves.TO_PSP, it.pc_hash)) if src]
+                             + [saves.SKIP])
+                box.setCurrentText(it.action)  # for a conflict, the newest side
                 box.currentTextChanged.connect(lambda a, it=it: setattr(it, "action", a))
                 self.table.setCellWidget(r, 3, box)
             else:
