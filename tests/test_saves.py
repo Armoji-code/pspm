@@ -123,3 +123,13 @@ def test_save_missing_on_one_side_is_copied_there(tmp_path):
     shutil.rmtree(psp / "A")  # gone from the PSP after a sync: it used to read "PSP → PC" and fail
     [a] = sync(psp, pc, last, bk)
     assert a.action == saves.TO_PSP and (psp / "A" / "DATA.BIN").read_bytes() == b"a"
+
+
+def test_sync_stopped_midway_leaves_the_old_save(tmp_path):
+    psp, pc = tmp_path / "psp", tmp_path / "pc"
+    put(psp, "A", b"old")
+    put(pc, "A", b"new")
+    (psp / "A").rename(psp / ("A" + saves.OLD))  # unplugged after moving the old save aside
+    (psp / ("A" + saves.TMP)).mkdir()
+    [a] = saves.plan(psp, pc, {})
+    assert (psp / "A" / "DATA.BIN").read_bytes() == b"old" and a.conflict

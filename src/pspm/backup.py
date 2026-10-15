@@ -29,7 +29,7 @@ import keyring
 import keyring.errors
 from platformdirs import user_data_path
 
-from .saves import TMP
+from .saves import OLD, TMP
 
 STATE = user_data_path("pspm") / "backup.json"
 RESTORE_BACKUPS = user_data_path("pspm") / "restore-backups"
@@ -288,7 +288,7 @@ def scan(root: Path, folders: list[Path]) -> dict[str, Path]:
     return {
         p.relative_to(root).as_posix(): p
         for d in folders if d.is_dir() for p in d.rglob("*")
-        if p.is_file() and TMP not in p.as_posix()  # skip half-copied saves from a running sync
+        if p.is_file() and TMP not in p.as_posix() and OLD not in p.as_posix()  # skip half-copied saves from a running sync
     }
 
 
