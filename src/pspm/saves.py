@@ -123,9 +123,11 @@ def plan(psp: Path, pc: Path, last: dict, progress=lambda text: None, cache: dic
         conflict = False
         if a == b:
             action = SAME
-        elif not b or last.get(n) == b:  # missing on PC, or only the PSP changed
+        elif not a or not b:  # on one side only: copy it over (a save deleted on one side comes back)
+            action = TO_PSP if b else TO_PC
+        elif last.get(n) == b:  # only the PSP changed
             action = TO_PC
-        elif not a or last.get(n) == a:
+        elif last.get(n) == a:
             action = TO_PSP
         else:
             action, conflict = (TO_PC if ta >= tb else TO_PSP), True

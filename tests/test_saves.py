@@ -112,3 +112,14 @@ def test_history_is_per_ppsspp_folder(tmp_path):
     st["last"]["A"] = "h"
     assert saves.history(st, tmp_path / "wrong") == {"A": "h"}
     assert saves.history(st, tmp_path / "PSP" / "SAVEDATA") == {}
+
+
+def test_save_missing_on_one_side_is_copied_there(tmp_path):
+    import shutil
+
+    psp, pc, bk, last = tmp_path / "psp", tmp_path / "pc", tmp_path / "bk", {}
+    put(psp, "A", b"a")
+    sync(psp, pc, last, bk)
+    shutil.rmtree(psp / "A")  # gone from the PSP after a sync: it used to read "PSP → PC" and fail
+    [a] = sync(psp, pc, last, bk)
+    assert a.action == saves.TO_PSP and (psp / "A" / "DATA.BIN").read_bytes() == b"a"
